@@ -11,7 +11,7 @@ A portfolio-ready full-stack IT help desk ticket tracker for internship and job 
 
 ## Current Phase
 
-Phase 3 includes signup, login, logout, JWT authentication, basic user roles, protected ticket routes, and MongoDB-backed tickets that track who created them.
+Phase 4 includes role-based ticket workflow, technician assignment, status and priority updates, priority filtering, and dashboard cards.
 
 Roles currently available: `requester`, `technician`, and `admin`.
 
@@ -171,6 +171,7 @@ Auth routes:
 POST /api/auth/signup
 POST /api/auth/login
 GET  /api/auth/me
+GET  /api/auth/technicians
 ```
 
 Ticket routes:
@@ -182,6 +183,7 @@ GET    /api/tickets/:id
 PUT    /api/tickets/:id
 DELETE /api/tickets/:id
 POST   /api/tickets/:id/comments
+PATCH  /api/tickets/:id/assign
 ```
 
 Ticket routes require a JWT in the `Authorization` header:
@@ -190,9 +192,14 @@ Ticket routes require a JWT in the `Authorization` header:
 Authorization: Bearer your_token_here
 ```
 
-For Phase 3, tickets and comments use MongoDB through the Mongoose `Ticket` model.
+For Phase 4, ticket routes are role-aware:
 
-## How To Test Phase 3
+- Requesters can create tickets and view tickets they created.
+- Technicians can view tickets assigned to them and update ticket status.
+- Admins can view all tickets, assign tickets to technicians, and update status/priority.
+- Ticket priority can be filtered with `GET /api/tickets?priority=High`.
+
+## How To Test Phase 4
 
 1. Start the backend in one terminal:
 
@@ -216,19 +223,34 @@ http://127.0.0.1:5173
 
 4. Confirm that the ticket list loads.
 
-5. Click `Signup`, create an account, and confirm you are redirected to the ticket list.
+5. Create three accounts from `Signup`:
+   - one requester
+   - one technician
+   - one admin
 
-6. Confirm your name and role appear in the logged-in user bar.
+6. Login as the requester.
 
-7. Click `New Ticket`, create a ticket, and confirm you are redirected to the ticket detail page.
+7. Create a ticket and confirm it appears in the requester's ticket list.
 
-8. Confirm the ticket shows who created it.
+8. Logout and login as the technician.
 
-9. Add a comment on the ticket detail page and confirm it appears in the comments section.
+9. Confirm the technician does not see the requester's ticket yet.
 
-10. Click `Logout` and confirm you are redirected to the login page when trying to view tickets.
+10. Logout and login as the admin.
 
-11. Login with the same account and confirm the ticket list loads again.
+11. Open the requester's ticket, assign it to the technician, and optionally update priority/status.
+
+12. Logout and login as the technician.
+
+13. Confirm the assigned ticket now appears.
+
+14. Open the ticket and update its status to `In Progress`, `Resolved`, or `Closed`.
+
+15. Logout and login as the requester.
+
+16. Confirm the requester still sees their own ticket with the updated status.
+
+17. Use the priority dropdown on the ticket list to filter visible tickets by priority.
 
 ## How To Test Persistence
 

@@ -1,5 +1,17 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:9000/api";
 
+function getAuthHeaders() {
+  const token = localStorage.getItem("helpdeskToken");
+
+  if (!token) {
+    return {};
+  }
+
+  return {
+    Authorization: `Bearer ${token}`
+  };
+}
+
 async function handleResponse(response) {
   const data = await response.json();
 
@@ -39,6 +51,14 @@ export async function getCurrentUser(token) {
     headers: {
       Authorization: `Bearer ${token}`
     }
+  });
+
+  return handleResponse(response);
+}
+
+export async function getTechnicians() {
+  const response = await fetch(`${API_BASE_URL}/auth/technicians`, {
+    headers: getAuthHeaders()
   });
 
   return handleResponse(response);

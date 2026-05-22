@@ -1,13 +1,26 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { addComment, getTicket } from "../api/ticketApi.js";
+import { getTechnicians } from "../api/authApi.js";
+import { addComment, assignTicket, getTicket, updateTicket } from "../api/ticketApi.js";
 import CommentForm from "../components/CommentForm.jsx";
 import CommentList from "../components/CommentList.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
+
+const statuses = ["Open", "In Progress", "Resolved", "Closed"];
+const priorities = ["Low", "Medium", "High", "Critical"];
 
 function TicketDetails() {
   const { id } = useParams();
+  const { user } = useAuth();
   const [ticket, setTicket] = useState(null);
+  const [technicians, setTechnicians] = useState([]);
+  const [workflowData, setWorkflowData] = useState({
+    status: "Open",
+    priority: "Medium",
+    assignedTo: ""
+  });
   const [isLoading, setIsLoading] = useState(true);
+  const [isSavingWorkflow, setIsSavingWorkflow] = useState(false);
   const [isSavingComment, setIsSavingComment] = useState(false);
   const [error, setError] = useState("");
 
@@ -16,6 +29,11 @@ function TicketDetails() {
       try {
         const ticketData = await getTicket(id);
         setTicket(ticketData);
+        setWorkflowData({
+          status: ticketData.status,
+          priority: ticketData.priority,
+          assignedTo: ticketData.assignedTo ? ticketData.assignedTo.id : ""
+        });
       } catch (apiError) {
         setError(apiError.message);
       } finally {
@@ -25,6 +43,65 @@ function TicketDetails() {
 
     loadTicket();
   }, [id]);
+
+  useEffect(() => {
+    async function loadTechnicians() {
+      if (user.role !== "admin") {
+        return;
+      }
+
+      try {
+        const data = await getTechnicians();
+        setTechnicians(data.users);
+      } catch (apiError) {
+        setError(apiError.message);
+      }
+    }
+
+    loadTechnicians();
+  }, [user.role]);
+
+  function handleWorkflowChange(event) {
+    const { name, value } = event.target;
+
+    setWorkflowData((currentData) => ({
+      ...currentData,
+      [name]: value
+    }));
+  }
+
+  async function handleWorkflowSubmit(event) {
+    event.preventDefault();
+    setIsSavingWorkflow(true);
+    setError("");
+
+    try {
+      let updatedTicket = ticket;
+
+      if (user.role === "technician") {
+        updatedTicket = await updateTicket(id, { status: workflowData.status });
+      }
+
+      if (user.role === "admin") {
+        updatedTicket = await updateTicket(id, {
+          status: workflowData.status,
+          priority: workflowData.priority
+        });
+        updatedTicket = await assignTicket(id, workflowData.assignedTo);
+      }
+
+      setTicket(updatedTicket);
+      setWorkflowData({
+        status: updatedTicket.status,
+        priority: updatedTicket.priority,
+        assignedTo: updatedTicket.assignedTo ? updatedTicket.assignedTo.id : ""
+      });
+    } catch (apiError) {
+      setError(apiError.message);
+    } finally {
+      setIsSavingWorkflow(false);
+    }
+  }
 
   async function handleAddComment(text) {
     setIsSavingComment(true);
@@ -88,8 +165,69 @@ function TicketDetails() {
             <dt>Created By</dt>
             <dd>{ticket.createdBy ? ticket.createdBy.name : "Unknown"}</dd>
           </div>
+          <div>
+            <dt>Assigned To</dt>
+            <dd>{ticket.assignedTo ? ticket.assignedTo.name : "Unassigned"}</dd>
+          </div>
         </dl>
       </article>
+
+      {(user.role === "technician" || user.role === "admin") && (
+        <section className="workflow-panel">
+          <div>
+            <p className="eyebrow">Workflow</p>
+            <h2>Update Ticket</h2>
+          </div>
+
+          <form className="workflow-form" onSubmit={handleWorkflowSubmit}>
+            <label>
+              Status
+              <select name="status" value={workflowData.status} onChange={handleWorkflowChange}>
+                {statuses.map((status) => (
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {user.role === "admin" && (
+              <>
+                <label>
+                  Priority
+                  <select name="priority" value={workflowData.priority} onChange={handleWorkflowChange}>
+                    {priorities.map((priority) => (
+                      <option key={priority} value={priority}>
+                        {priority}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  Assigned technician
+                  <select
+                    name="assignedTo"
+                    value={workflowData.assignedTo}
+                    onChange={handleWorkflowChange}
+                  >
+                    <option value="">Unassigned</option>
+                    {technicians.map((technician) => (
+                      <option key={technician.id} value={technician.id}>
+                        {technician.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </>
+            )}
+
+            <button className="button" type="submit" disabled={isSavingWorkflow}>
+              {isSavingWorkflow ? "Saving..." : "Save Workflow"}
+            </button>
+          </form>
+        </section>
+      )}
 
       <section className="comments-section">
         <div className="page-heading compact">

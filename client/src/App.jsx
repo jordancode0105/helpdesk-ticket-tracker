@@ -24,7 +24,7 @@ function App() {
               <NavLink to="/" end>
                 Tickets
               </NavLink>
-              <NavLink to="/tickets/new">Create Ticket</NavLink>
+              {user.role !== "technician" && <NavLink to="/tickets/new">Create Ticket</NavLink>}
             </>
           )}
           {!user && <NavLink to="/login">Login</NavLink>}

@@ -113,6 +113,53 @@ textarea {
   margin-top: 8px;
 }
 
+.helper-text {
+  color: #5b6b84;
+  margin: 6px 0 0;
+}
+
+.dashboard-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.stat-card,
+.filter-bar,
+.workflow-panel {
+  background: #ffffff;
+  border: 1px solid #dce4ef;
+  border-radius: 8px;
+  box-shadow: 0 10px 24px rgba(23, 32, 51, 0.06);
+}
+
+.stat-card {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+}
+
+.stat-card span {
+  color: #5b6b84;
+  font-weight: 800;
+}
+
+.stat-card strong {
+  font-size: 2rem;
+}
+
+.filter-bar {
+  padding: 16px;
+}
+
+.filter-bar label {
+  color: #273852;
+  display: grid;
+  font-weight: 800;
+  gap: 8px;
+  max-width: 260px;
+}
+
 .button {
   align-items: center;
   background: #1d4ed8;
@@ -223,7 +270,8 @@ textarea {
 }
 
 .form-card,
-.comments-section {
+.comments-section,
+.workflow-panel {
   display: grid;
   gap: 16px;
   padding: 20px;
@@ -323,6 +371,27 @@ textarea:focus {
   gap: 12px;
 }
 
+.workflow-panel h2 {
+  margin: 0;
+}
+
+.workflow-form {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.workflow-form label {
+  color: #273852;
+  display: grid;
+  font-weight: 800;
+  gap: 8px;
+}
+
+.workflow-form .button {
+  align-self: end;
+}
+
 .text-link {
   color: #1d4ed8;
   font-weight: 800;
@@ -365,7 +434,13 @@ textarea:focus {
   }
 
   .form-grid,
-  .detail-grid {
+  .detail-grid,
+  .dashboard-grid,
+  .workflow-form {
     grid-template-columns: 1fr;
+  }
+
+  .filter-bar label {
+    max-width: none;
   }
 }

@@ -22,8 +22,17 @@ async function handleResponse(response) {
   return data;
 }
 
-export async function getTickets() {
-  const response = await fetch(`${API_BASE_URL}/tickets`, {
+export async function getTickets(priority = "All") {
+  const params = new URLSearchParams();
+
+  if (priority !== "All") {
+    params.set("priority", priority);
+  }
+
+  const queryString = params.toString();
+  const url = queryString ? `${API_BASE_URL}/tickets?${queryString}` : `${API_BASE_URL}/tickets`;
+
+  const response = await fetch(url, {
     headers: getAuthHeaders()
   });
   return handleResponse(response);
@@ -57,6 +66,32 @@ export async function addComment(ticketId, text) {
       ...getAuthHeaders()
     },
     body: JSON.stringify({ text })
+  });
+
+  return handleResponse(response);
+}
+
+export async function updateTicket(ticketId, ticketData) {
+  const response = await fetch(`${API_BASE_URL}/tickets/${ticketId}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      ...getAuthHeaders()
+    },
+    body: JSON.stringify(ticketData)
+  });
+
+  return handleResponse(response);
+}
+
+export async function assignTicket(ticketId, assignedTo) {
+  const response = await fetch(`${API_BASE_URL}/tickets/${ticketId}/assign`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...getAuthHeaders()
+    },
+    body: JSON.stringify({ assignedTo })
   });
 
   return handleResponse(response);

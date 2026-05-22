@@ -21,6 +21,7 @@ function TicketCard({ ticket }) {
         </span>
         <span>{ticket.category}</span>
         {ticket.createdBy && <span>Created by {ticket.createdBy.name}</span>}
+        {ticket.assignedTo && <span>Assigned to {ticket.assignedTo.name}</span>}
       </div>
     </article>
   );

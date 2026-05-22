@@ -64,6 +64,20 @@ router.post("/login", async (req, res) => {
   }
 });
 
+router.get("/technicians", protect, async (req, res) => {
+  if (req.user.role !== "admin") {
+    return res.status(403).json({ message: "Only admins can view technicians" });
+  }
+
+  try {
+    const technicians = await User.find({ role: "technician" }).select("name email role");
+
+    res.json({ users: technicians.map(formatUser) });
+  } catch (error) {
+    res.status(500).json({ message: "Unable to get technicians" });
+  }
+});
+
 router.get("/me", protect, (req, res) => {
   res.json({ user: formatUser(req.user) });
 });
