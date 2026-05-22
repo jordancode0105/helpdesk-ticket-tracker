@@ -102,15 +102,39 @@ Create `server/.env`:
 PORT=9000
 MONGO_URI=your_mongodb_connection_string
 JWT_SECRET=replace_this_with_a_long_random_secret
+CORS_ORIGIN=http://127.0.0.1:5173,http://localhost:5173
 ```
 
 Optional frontend override in `client/.env`:
 
 ```env
-VITE_API_URL=http://localhost:9000/api
+VITE_API_BASE_URL=http://localhost:9000/api
 ```
 
 Do not commit `.env` files. This project ignores `.env` in `.gitignore`.
+
+### Production Environment Variables
+
+Backend production variables:
+
+```txt
+MONGO_URI=your_mongodb_atlas_production_connection_string
+JWT_SECRET=a_long_random_production_secret
+CORS_ORIGIN=https://your-vercel-app.vercel.app
+```
+
+Frontend production variables:
+
+```txt
+VITE_API_BASE_URL=https://your-render-backend.onrender.com/api
+```
+
+Notes:
+
+- `JWT_SECRET` must be different from local/demo values.
+- `MONGO_URI` should point to the production MongoDB Atlas database.
+- `CORS_ORIGIN` should match the deployed frontend URL exactly.
+- If you use Vercel preview deployments, add each allowed preview URL to `CORS_ORIGIN` separated by commas.
 
 ## Setup Instructions
 
@@ -169,6 +193,65 @@ Open:
 ```txt
 http://127.0.0.1:5173
 ```
+
+## Deployment Notes
+
+This project is prepared for deployment, but it is not deployed automatically.
+
+### Render Backend
+
+Recommended Render settings:
+
+```txt
+Service type: Web Service
+Root directory: server
+Build command: npm install
+Start command: npm start
+```
+
+Set these environment variables in Render:
+
+```txt
+MONGO_URI=your_mongodb_atlas_connection_string
+JWT_SECRET=a_long_random_production_secret
+CORS_ORIGIN=https://your-vercel-app.vercel.app
+```
+
+Render provides a `PORT` value for web services, so the backend reads `process.env.PORT` automatically.
+
+After the backend deploys, copy the Render service URL. The frontend needs the API URL with `/api` at the end:
+
+```txt
+https://your-render-backend.onrender.com/api
+```
+
+### Vercel Frontend
+
+Recommended Vercel settings:
+
+```txt
+Framework preset: Vite
+Root directory: client
+Build command: npm run build
+Output directory: dist
+```
+
+Set this environment variable in Vercel:
+
+```txt
+VITE_API_BASE_URL=https://your-render-backend.onrender.com/api
+```
+
+Vite only exposes frontend environment variables that start with `VITE_`, so do not put backend secrets in frontend variables.
+
+After Vercel deploys, copy the frontend URL and add it to the backend `CORS_ORIGIN` value in Render.
+
+Official docs:
+
+- [Render Express deployment](https://render.com/docs/deploy-node-express-app)
+- [Render environment variables](https://render.com/docs/environment-variables)
+- [Vercel Vite deployment](https://vercel.com/docs/frameworks/frontend/vite)
+- [Vercel environment variables](https://vercel.com/docs/environment-variables)
 
 ## Demo Account Instructions
 
