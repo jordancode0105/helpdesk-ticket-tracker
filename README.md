@@ -53,25 +53,25 @@ I built this project to show that I can connect software development skills to r
 
 ## Screenshots
 
-Add screenshots here before publishing to GitHub:
+### Login
 
-```txt
-screenshots/
-  login.png
-  requester-dashboard.png
-  create-ticket.png
-  admin-ticket-workflow.png
-  technician-assigned-ticket.png
-  ticket-comments.png
-```
+![Login screen for demo users](docs/screenshots/login.png)
 
-Suggested README image layout:
+### Requester Dashboard
 
-```md
-![Login screen](screenshots/login.png)
-![Requester dashboard](screenshots/requester-dashboard.png)
-![Admin workflow](screenshots/admin-ticket-workflow.png)
-```
+![Requester dashboard with visible tickets and summary cards](docs/screenshots/requester-dashboard.png)
+
+### Admin Assignment
+
+![Admin ticket workflow with technician assignment controls](docs/screenshots/admin-assignment.png)
+
+### Technician Workflow
+
+![Technician dashboard showing assigned tickets and status workflow](docs/screenshots/technician-workflow.png)
+
+### Ticket Detail
+
+![Ticket detail page with comments and workflow history](docs/screenshots/ticket-detail.png)
 
 ## Folder Structure
 
