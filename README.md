@@ -1,19 +1,21 @@
 # IT Help Desk Ticket Tracker
 
-A full-stack IT help desk ticket tracker built for internship and entry-level IT/job applications. The app models a realistic support workflow where requesters submit issues, technicians work assigned tickets, and admins manage the queue.
+A full-stack software engineering portfolio project that demonstrates authentication, role-based workflows, database persistence, and production deployment. The app uses a help desk ticketing workflow as the product domain, where requesters submit issues, technicians work assigned tickets, and admins manage the queue.
 
 ## Live Demo
 
 - Frontend: [https://helpdesk-ticket-tracker.vercel.app](https://helpdesk-ticket-tracker.vercel.app)
 - Backend API: [https://it-help-desk-api.onrender.com](https://it-help-desk-api.onrender.com)
 
+The live demo uses seeded demo data and may be reset periodically. The Render backend may take a few seconds to wake up on the first request.
+
 ## Project Overview
 
-This project demonstrates a practical internal support tool instead of a generic CRUD app. It includes authentication, role-based ticket visibility, MongoDB persistence, ticket comments, assignment workflow, status updates, priority filtering, and a clean React interface.
+This project demonstrates a practical role-based web application instead of a generic CRUD app. It includes authentication, protected API routes, role-aware ticket visibility, MongoDB persistence, comments, assignment workflow, status updates, priority filtering, deployment configuration, and a clean React interface.
 
 ## Why I Built This
 
-I built this project to show that I can connect software development skills to real IT support workflows. Help desk teams need clear intake, ownership, prioritization, and status tracking, so this app gave me a focused way to practice full-stack development while building something relevant to IT internships and junior technical roles.
+I built this project to practice and demonstrate full-stack application development from end to end: React UI, Express API design, MongoDB persistence, JWT authentication, password hashing, role-based workflows, environment configuration, and deployment with Vercel, Render, and MongoDB Atlas. The help desk domain gives the app a realistic workflow with ownership, prioritization, and status tracking, while the technical patterns apply broadly to many software engineering roles and product domains.
 
 ## Features
 
@@ -203,7 +205,16 @@ http://127.0.0.1:5173
 
 ## Deployment Notes
 
-This project is prepared for deployment, but it is not deployed automatically.
+This project is deployed with Vercel for the frontend, Render for the backend API, and MongoDB Atlas for the database.
+
+Current deployment URLs:
+
+```txt
+Frontend: https://helpdesk-ticket-tracker.vercel.app
+Backend API: https://it-help-desk-api.onrender.com
+```
+
+The Render backend may spin down when inactive, so the first live demo request can take a few seconds.
 
 ### Render Backend
 
@@ -278,6 +289,8 @@ npm.cmd run seed
 
 The seed script does not run automatically. It only runs when you manually call `npm run seed`.
 
+The live deployment uses seeded demo data. Demo records may be reset periodically to keep the project clean for portfolio review.
+
 Local/demo-only accounts:
 
 ```txt
@@ -348,5 +361,4 @@ PATCH  /api/tickets/:id/assign
 - File attachments
 - Email notifications
 - Admin user management page
-- Deployment to Render/Vercel
 - Automated tests with Jest, Supertest, or Playwright
