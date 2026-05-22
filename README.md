@@ -7,13 +7,13 @@ A portfolio-ready full-stack IT help desk ticket tracker for internship and job 
 - React frontend with Vite
 - Node.js and Express backend
 - MongoDB with Mongoose connection setup
-- JWT authentication planned for a later phase
+- JWT authentication with bcrypt password hashing
 
 ## Current Phase
 
-Phase 2.5 includes the React frontend plus MongoDB-backed ticket and comment routes, so tickets persist after the backend restarts.
+Phase 3 includes signup, login, logout, JWT authentication, basic user roles, protected ticket routes, and MongoDB-backed tickets that track who created them.
 
-Authentication is not included yet.
+Roles currently available: `requester`, `technician`, and `admin`.
 
 ## Folder Structure
 
@@ -24,14 +24,20 @@ client/
   vite.config.js
   src/
     api/
+      authApi.js
       ticketApi.js
     components/
       CommentForm.jsx
       CommentList.jsx
+      ProtectedRoute.jsx
       TicketCard.jsx
       TicketForm.jsx
+    context/
+      AuthContext.jsx
     pages/
       CreateTicket.jsx
+      Login.jsx
+      Signup.jsx
       TicketDetails.jsx
       Tickets.jsx
     styles/
@@ -45,7 +51,12 @@ server/
     Ticket.js
     User.js
   routes/
+    authRoutes.js
     ticketRoutes.js
+  middleware/
+    authMiddleware.js
+  utils/
+    generateToken.js
   .env.example
   package.json
   server.js
@@ -84,6 +95,7 @@ cp .env.example .env
 ```env
 PORT=9000
 MONGO_URI=mongodb://127.0.0.1:27017/helpdesk_tracker
+JWT_SECRET=replace_this_with_a_long_random_secret
 ```
 
 4. Start the backend server:
@@ -153,6 +165,16 @@ VITE_API_URL=http://localhost:9000/api
 
 ## Backend Routes
 
+Auth routes:
+
+```txt
+POST /api/auth/signup
+POST /api/auth/login
+GET  /api/auth/me
+```
+
+Ticket routes:
+
 ```txt
 GET    /api/tickets
 POST   /api/tickets
@@ -162,9 +184,15 @@ DELETE /api/tickets/:id
 POST   /api/tickets/:id/comments
 ```
 
-For Phase 2.5, these routes use the Mongoose `Ticket` model so tickets and comments persist in MongoDB.
+Ticket routes require a JWT in the `Authorization` header:
 
-## How To Test Phase 2.5
+```txt
+Authorization: Bearer your_token_here
+```
+
+For Phase 3, tickets and comments use MongoDB through the Mongoose `Ticket` model.
+
+## How To Test Phase 3
 
 1. Start the backend in one terminal:
 
@@ -188,9 +216,19 @@ http://127.0.0.1:5173
 
 4. Confirm that the ticket list loads.
 
-5. Click `New Ticket`, create a ticket, and confirm you are redirected to the ticket detail page.
+5. Click `Signup`, create an account, and confirm you are redirected to the ticket list.
 
-6. Add a comment on the ticket detail page and confirm it appears in the comments section.
+6. Confirm your name and role appear in the logged-in user bar.
+
+7. Click `New Ticket`, create a ticket, and confirm you are redirected to the ticket detail page.
+
+8. Confirm the ticket shows who created it.
+
+9. Add a comment on the ticket detail page and confirm it appears in the comments section.
+
+10. Click `Logout` and confirm you are redirected to the login page when trying to view tickets.
+
+11. Login with the same account and confirm the ticket list loads again.
 
 ## How To Test Persistence
 
@@ -219,4 +257,4 @@ http://127.0.0.1:5173
 
 ## Next Phase
 
-The next phase should add authentication routes, password hashing, JWT token generation, protected middleware, and database-backed controller files.
+The next phase can add fuller role-based permissions, dashboard metrics, filtering, and edit/delete controls in the frontend.

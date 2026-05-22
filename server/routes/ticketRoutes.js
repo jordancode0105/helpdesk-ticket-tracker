@@ -1,13 +1,30 @@
 const express = require("express");
 const Ticket = require("../models/Ticket");
+const { protect } = require("../middleware/authMiddleware");
 
 const router = express.Router();
+
+router.use(protect);
+
+function formatUser(user) {
+  if (!user) {
+    return null;
+  }
+
+  return {
+    id: user._id.toString(),
+    name: user.name,
+    email: user.email,
+    role: user.role
+  };
+}
 
 function formatComment(comment) {
   return {
     id: comment._id.toString(),
     text: comment.text,
-    createdAt: comment.createdAt
+    createdAt: comment.createdAt,
+    user: formatUser(comment.user)
   };
 }
 
@@ -19,6 +36,7 @@ function formatTicket(ticket) {
     category: ticket.category,
     status: ticket.status,
     priority: ticket.priority,
+    createdBy: formatUser(ticket.createdBy),
     createdAt: ticket.createdAt,
     updatedAt: ticket.updatedAt,
     comments: ticket.comments.map(formatComment)
@@ -27,7 +45,10 @@ function formatTicket(ticket) {
 
 router.get("/", async (req, res) => {
   try {
-    const tickets = await Ticket.find().sort({ createdAt: -1 });
+    const tickets = await Ticket.find()
+      .populate("createdBy", "name email role")
+      .populate("comments.user", "name email role")
+      .sort({ createdAt: -1 });
 
     res.json(tickets.map(formatTicket));
   } catch (error) {
@@ -42,10 +63,15 @@ router.post("/", async (req, res) => {
       description: req.body.description,
       category: req.body.category || "Other",
       status: req.body.status || "Open",
-      priority: req.body.priority || "Medium"
+      priority: req.body.priority || "Medium",
+      createdBy: req.user._id
     });
 
-    res.status(201).json(formatTicket(newTicket));
+    const savedTicket = await Ticket.findById(newTicket._id)
+      .populate("createdBy", "name email role")
+      .populate("comments.user", "name email role");
+
+    res.status(201).json(formatTicket(savedTicket));
   } catch (error) {
     res.status(400).json({ message: "Unable to create ticket" });
   }
@@ -53,7 +79,9 @@ router.post("/", async (req, res) => {
 
 router.get("/:id", async (req, res) => {
   try {
-    const ticket = await Ticket.findById(req.params.id);
+    const ticket = await Ticket.findById(req.params.id)
+      .populate("createdBy", "name email role")
+      .populate("comments.user", "name email role");
 
     if (!ticket) {
       return res.status(404).json({ message: "Ticket not found" });
@@ -79,7 +107,10 @@ router.put("/:id", async (req, res) => {
     ticket.status = req.body.status || ticket.status;
     ticket.priority = req.body.priority || ticket.priority;
 
-    const updatedTicket = await ticket.save();
+    await ticket.save();
+    const updatedTicket = await Ticket.findById(ticket._id)
+      .populate("createdBy", "name email role")
+      .populate("comments.user", "name email role");
 
     res.json(formatTicket(updatedTicket));
   } catch (error) {
@@ -110,11 +141,16 @@ router.post("/:id/comments", async (req, res) => {
     }
 
     ticket.comments.push({
-      text: req.body.text
+      text: req.body.text,
+      user: req.user._id
     });
 
     const updatedTicket = await ticket.save();
-    const newComment = updatedTicket.comments[updatedTicket.comments.length - 1];
+    const populatedTicket = await Ticket.findById(updatedTicket._id).populate(
+      "comments.user",
+      "name email role"
+    );
+    const newComment = populatedTicket.comments[populatedTicket.comments.length - 1];
 
     res.status(201).json(formatComment(newComment));
   } catch (error) {

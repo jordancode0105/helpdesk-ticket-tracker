@@ -84,6 +84,10 @@ function TicketDetails() {
             <dt>Created</dt>
             <dd>{new Date(ticket.createdAt).toLocaleString()}</dd>
           </div>
+          <div>
+            <dt>Created By</dt>
+            <dd>{ticket.createdBy ? ticket.createdBy.name : "Unknown"}</dd>
+          </div>
         </dl>
       </article>
 

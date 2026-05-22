@@ -42,6 +42,18 @@ textarea {
   margin-bottom: 32px;
 }
 
+.user-bar {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #dce4ef;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding: 12px 14px;
+}
+
 .site-header h1,
 .page-heading h2,
 .ticket-card h2,
@@ -225,6 +237,16 @@ textarea {
   gap: 8px;
 }
 
+.form-note {
+  color: #5b6b84;
+  margin: 0;
+}
+
+.form-note a {
+  color: #1d4ed8;
+  font-weight: 800;
+}
+
 input,
 select,
 textarea {
@@ -325,6 +347,7 @@ textarea:focus {
   }
 
   .site-header,
+  .user-bar,
   .page-heading,
   .ticket-card-header,
   .ticket-detail-header {

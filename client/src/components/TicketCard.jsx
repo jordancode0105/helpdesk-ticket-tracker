@@ -20,6 +20,7 @@ function TicketCard({ ticket }) {
           {ticket.priority}
         </span>
         <span>{ticket.category}</span>
+        {ticket.createdBy && <span>Created by {ticket.createdBy.name}</span>}
       </div>
     </article>
   );

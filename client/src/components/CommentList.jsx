@@ -8,7 +8,10 @@ function CommentList({ comments }) {
       {comments.map((comment) => (
         <article className="comment" key={comment.id}>
           <p>{comment.text}</p>
-          <span>{new Date(comment.createdAt).toLocaleString()}</span>
+          <span>
+            {comment.user ? `${comment.user.name} - ` : ""}
+            {new Date(comment.createdAt).toLocaleString()}
+          </span>
         </article>
       ))}
     </div>
