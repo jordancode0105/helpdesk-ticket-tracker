@@ -4,6 +4,7 @@
   "description": "A full-stack IT help desk ticket tracker built with React, Express, and MongoDB.",
   "private": true,
   "scripts": {
-    "server": "npm run dev --prefix server"
+    "server": "npm run dev --prefix server",
+    "client": "npm run dev --prefix client"
   }
 }
