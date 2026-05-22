@@ -5,7 +5,12 @@ function ProtectedRoute({ children }) {
   const { user, isCheckingAuth } = useAuth();
 
   if (isCheckingAuth) {
-    return <p className="empty-state">Checking login...</p>;
+    return (
+      <div className="state-card">
+        <strong>Checking login</strong>
+        <p>Confirming your session before loading the ticket tracker.</p>
+      </div>
+    );
   }
 
   if (!user) {

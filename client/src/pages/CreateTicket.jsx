@@ -28,6 +28,9 @@ function CreateTicket() {
         <div>
           <p className="eyebrow">Intake</p>
           <h2>Create Ticket</h2>
+          <p className="helper-text">
+            Add enough detail for a technician to understand the issue without follow-up.
+          </p>
         </div>
       </div>
 

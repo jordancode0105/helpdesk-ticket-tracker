@@ -144,6 +144,11 @@ textarea {
   font-weight: 800;
 }
 
+.stat-card small {
+  color: #6b7280;
+  font-weight: 700;
+}
+
 .stat-card strong {
   font-size: 2rem;
 }
@@ -295,6 +300,12 @@ textarea {
   font-weight: 800;
 }
 
+.field-hint {
+  color: #6b7280;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
 input,
 select,
 textarea {
@@ -406,8 +417,29 @@ textarea:focus {
   padding: 12px;
 }
 
-.empty-state {
+.empty-state,
+.state-card p {
   margin: 0;
+}
+
+.state-card {
+  background: #ffffff;
+  border: 1px dashed #b9c5d6;
+  border-radius: 8px;
+  color: #5b6b84;
+  display: grid;
+  gap: 8px;
+  padding: 22px;
+}
+
+.state-card strong {
+  color: #172033;
+  font-size: 1.05rem;
+}
+
+.state-card .button {
+  justify-self: start;
+  margin-top: 4px;
 }
 
 @media (max-width: 720px) {

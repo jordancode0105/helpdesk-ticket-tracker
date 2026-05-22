@@ -24,6 +24,12 @@ function Login() {
   async function handleSubmit(event) {
     event.preventDefault();
     setError("");
+
+    if (!formData.email.trim() || !formData.password.trim()) {
+      setError("Email and password are required.");
+      return;
+    }
+
     setIsSaving(true);
 
     try {
@@ -42,6 +48,7 @@ function Login() {
         <div>
           <p className="eyebrow">Welcome Back</p>
           <h2>Login</h2>
+          <p className="helper-text">Use a demo account or one you created during testing.</p>
         </div>
       </div>
 
@@ -50,7 +57,14 @@ function Login() {
       <form className="form-card" onSubmit={handleSubmit}>
         <label>
           Email
-          <input name="email" type="email" value={formData.email} onChange={handleChange} required />
+          <input
+            name="email"
+            type="email"
+            value={formData.email}
+            onChange={handleChange}
+            placeholder="requester@example.com"
+            required
+          />
         </label>
 
         <label>
@@ -60,6 +74,7 @@ function Login() {
             type="password"
             value={formData.password}
             onChange={handleChange}
+            placeholder="Enter your password"
             required
           />
         </label>

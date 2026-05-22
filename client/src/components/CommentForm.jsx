@@ -2,15 +2,25 @@ import { useState } from "react";
 
 function CommentForm({ onSubmit, isSaving }) {
   const [text, setText] = useState("");
+  const [validationMessage, setValidationMessage] = useState("");
 
   function handleSubmit(event) {
     event.preventDefault();
-    onSubmit(text);
+
+    if (text.trim().length < 3) {
+      setValidationMessage("Comment must be at least 3 characters.");
+      return;
+    }
+
+    setValidationMessage("");
+    onSubmit(text.trim());
     setText("");
   }
 
   return (
     <form className="comment-form" onSubmit={handleSubmit}>
+      {validationMessage && <p className="error-message">{validationMessage}</p>}
+
       <label>
         Add comment
         <textarea

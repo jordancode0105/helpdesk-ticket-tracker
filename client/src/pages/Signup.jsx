@@ -26,6 +26,22 @@ function Signup() {
   async function handleSubmit(event) {
     event.preventDefault();
     setError("");
+
+    if (formData.name.trim().length < 2) {
+      setError("Name must be at least 2 characters.");
+      return;
+    }
+
+    if (!formData.email.includes("@")) {
+      setError("Enter a valid email address.");
+      return;
+    }
+
+    if (formData.password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+
     setIsSaving(true);
 
     try {
@@ -44,6 +60,7 @@ function Signup() {
         <div>
           <p className="eyebrow">New User</p>
           <h2>Signup</h2>
+          <p className="helper-text">Choose a role to test requester, technician, or admin workflows.</p>
         </div>
       </div>
 
@@ -52,12 +69,25 @@ function Signup() {
       <form className="form-card" onSubmit={handleSubmit}>
         <label>
           Name
-          <input name="name" value={formData.name} onChange={handleChange} required />
+          <input
+            name="name"
+            value={formData.name}
+            onChange={handleChange}
+            placeholder="Alex Morgan"
+            required
+          />
         </label>
 
         <label>
           Email
-          <input name="email" type="email" value={formData.email} onChange={handleChange} required />
+          <input
+            name="email"
+            type="email"
+            value={formData.email}
+            onChange={handleChange}
+            placeholder="alex@example.com"
+            required
+          />
         </label>
 
         <label>
@@ -68,6 +98,7 @@ function Signup() {
             value={formData.password}
             onChange={handleChange}
             minLength="6"
+            placeholder="At least 6 characters"
             required
           />
         </label>

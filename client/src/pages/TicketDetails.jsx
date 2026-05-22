@@ -177,6 +177,11 @@ function TicketDetails() {
           <div>
             <p className="eyebrow">Workflow</p>
             <h2>Update Ticket</h2>
+            <p className="helper-text">
+              {user.role === "admin"
+                ? "Admins can assign technicians and adjust status or priority."
+                : "Technicians can move assigned tickets through the status workflow."}
+            </p>
           </div>
 
           <form className="workflow-form" onSubmit={handleWorkflowSubmit}>

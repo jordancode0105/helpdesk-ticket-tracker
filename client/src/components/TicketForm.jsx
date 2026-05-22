@@ -10,6 +10,7 @@ function TicketForm({ onSubmit, isSaving }) {
     category: "Other",
     priority: "Medium"
   });
+  const [validationMessage, setValidationMessage] = useState("");
 
   function handleChange(event) {
     const { name, value } = event.target;
@@ -22,11 +23,25 @@ function TicketForm({ onSubmit, isSaving }) {
 
   function handleSubmit(event) {
     event.preventDefault();
+
+    if (formData.title.trim().length < 5) {
+      setValidationMessage("Ticket title must be at least 5 characters.");
+      return;
+    }
+
+    if (formData.description.trim().length < 10) {
+      setValidationMessage("Description must be at least 10 characters.");
+      return;
+    }
+
+    setValidationMessage("");
     onSubmit(formData);
   }
 
   return (
     <form className="form-card" onSubmit={handleSubmit}>
+      {validationMessage && <p className="error-message">{validationMessage}</p>}
+
       <label>
         Ticket title
         <input
@@ -36,6 +51,7 @@ function TicketForm({ onSubmit, isSaving }) {
           placeholder="Example: Printer will not connect"
           required
         />
+        <span className="field-hint">Use a short summary of the issue.</span>
       </label>
 
       <label>
@@ -48,6 +64,7 @@ function TicketForm({ onSubmit, isSaving }) {
           rows="5"
           required
         />
+        <span className="field-hint">Include device, app, error message, and what changed.</span>
       </label>
 
       <div className="form-grid">

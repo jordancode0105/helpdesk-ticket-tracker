@@ -44,9 +44,9 @@ function Tickets() {
   };
 
   const roleDescription = {
-    requester: "Showing tickets you created.",
-    technician: "Showing tickets assigned to you.",
-    admin: "Showing all tickets."
+    requester: "Requester view: you can create tickets and track only the tickets you opened.",
+    technician: "Technician view: your queue shows tickets an admin assigned to you.",
+    admin: "Admin view: you can review every ticket, assign technicians, and adjust workflow fields."
   };
 
   return (
@@ -69,18 +69,22 @@ function Tickets() {
         <article className="stat-card">
           <span>Total tickets</span>
           <strong>{dashboardStats.total}</strong>
+          <small>{user.role === "admin" ? "All tickets" : "Visible to you"}</small>
         </article>
         <article className="stat-card">
           <span>Open tickets</span>
           <strong>{dashboardStats.open}</strong>
+          <small>Waiting for triage</small>
         </article>
         <article className="stat-card">
           <span>In Progress</span>
           <strong>{dashboardStats.inProgress}</strong>
+          <small>Currently being worked</small>
         </article>
         <article className="stat-card">
           <span>Resolved</span>
           <strong>{dashboardStats.resolved}</strong>
+          <small>Ready for closure</small>
         </article>
       </section>
 
@@ -97,11 +101,32 @@ function Tickets() {
         </label>
       </div>
 
-      {isLoading && <p className="empty-state">Loading tickets...</p>}
-      {error && <p className="error-message">{error}</p>}
+      {isLoading && (
+        <div className="state-card">
+          <strong>Loading tickets</strong>
+          <p>Checking your role and pulling the matching ticket queue.</p>
+        </div>
+      )}
+      {error && (
+        <p className="error-message">
+          {error}. Please confirm the backend is running and try again.
+        </p>
+      )}
 
       {!isLoading && !error && tickets.length === 0 && (
-        <p className="empty-state">No tickets have been created yet.</p>
+        <div className="state-card">
+          <strong>No tickets found</strong>
+          <p>
+            {priorityFilter === "All"
+              ? "There are no tickets in this view yet."
+              : `No ${priorityFilter.toLowerCase()} priority tickets match this view.`}
+          </p>
+          {user.role === "requester" && (
+            <Link className="button secondary" to="/tickets/new">
+              Create your first ticket
+            </Link>
+          )}
+        </div>
       )}
 
       <div className="ticket-list">
