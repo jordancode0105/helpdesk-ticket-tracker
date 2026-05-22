@@ -1,0 +1,9 @@
+{
+  "name": "it-help-desk-ticket-tracker",
+  "version": "1.0.0",
+  "description": "A full-stack IT help desk ticket tracker built with React, Express, and MongoDB.",
+  "private": true,
+  "scripts": {
+    "server": "npm run dev --prefix server"
+  }
+}
