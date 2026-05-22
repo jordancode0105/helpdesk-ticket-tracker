@@ -172,7 +172,22 @@ http://127.0.0.1:5173
 
 ## Demo Account Instructions
 
-For a clean demo, create three accounts from the Signup page:
+Create local demo users and sample tickets with:
+
+```bash
+cd server
+npm run seed
+```
+
+On Windows PowerShell:
+
+```bash
+npm.cmd run seed
+```
+
+The seed script does not run automatically. It only runs when you manually call `npm run seed`.
+
+Local/demo-only accounts:
 
 ```txt
 Requester
@@ -191,7 +206,9 @@ Password: Password123!
 Role: admin
 ```
 
-These are suggested demo credentials only. The app does not seed users automatically yet, so create them manually through the UI.
+The password `Password123!` is for local demo use only. Do not reuse it for real accounts or production deployments.
+
+The seed script hashes demo passwords with `bcryptjs`, upserts the demo users, removes old demo tickets for those demo users, and recreates a small sample ticket queue.
 
 ## Testing The Role Workflow
 
@@ -234,7 +251,6 @@ PATCH  /api/tickets/:id/assign
 
 ## Future Improvements
 
-- Seed script for demo users and sample tickets
 - Better role permissions for closing or reopening tickets
 - Search by title or description
 - Pagination for large ticket queues
