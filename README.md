@@ -67,7 +67,7 @@ I built this project to show that I can connect software development skills to r
 
 ### Technician Workflow
 
-![Technician dashboard showing assigned tickets and status workflow](docs/screenshots/technician-workflow.png)
+![Technician dashboard showing assigned tickets and status workflow](docs/screenshots/technician-ticket-view.png)
 
 ### Ticket Detail
 
