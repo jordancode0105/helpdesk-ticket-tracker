@@ -102,7 +102,8 @@ Create `server/.env`:
 PORT=9000
 MONGO_URI=your_mongodb_connection_string
 JWT_SECRET=replace_this_with_a_long_random_secret
-CORS_ORIGIN=http://127.0.0.1:5173,http://localhost:5173
+CLIENT_URL=http://localhost:5173
+CLIENT_URLS=http://localhost:5173,http://127.0.0.1:5173
 ```
 
 Optional frontend override in `client/.env`:
@@ -120,7 +121,8 @@ Backend production variables:
 ```txt
 MONGO_URI=your_mongodb_atlas_production_connection_string
 JWT_SECRET=a_long_random_production_secret
-CORS_ORIGIN=https://your-vercel-app.vercel.app
+CLIENT_URL=https://your-vercel-app.vercel.app
+CLIENT_URLS=https://your-vercel-app.vercel.app
 ```
 
 Frontend production variables:
@@ -133,8 +135,8 @@ Notes:
 
 - `JWT_SECRET` must be different from local/demo values.
 - `MONGO_URI` should point to the production MongoDB Atlas database.
-- `CORS_ORIGIN` should match the deployed frontend URL exactly.
-- If you use Vercel preview deployments, add each allowed preview URL to `CORS_ORIGIN` separated by commas.
+- `CLIENT_URL` should match the deployed frontend URL exactly.
+- Use `CLIENT_URLS` for comma-separated production or preview frontend URLs.
 
 ## Setup Instructions
 
@@ -214,7 +216,8 @@ Set these environment variables in Render:
 ```txt
 MONGO_URI=your_mongodb_atlas_connection_string
 JWT_SECRET=a_long_random_production_secret
-CORS_ORIGIN=https://your-vercel-app.vercel.app
+CLIENT_URL=https://your-vercel-app.vercel.app
+CLIENT_URLS=https://your-vercel-app.vercel.app
 ```
 
 Render provides a `PORT` value for web services, so the backend reads `process.env.PORT` automatically.
@@ -244,7 +247,7 @@ VITE_API_BASE_URL=https://your-render-backend.onrender.com/api
 
 Vite only exposes frontend environment variables that start with `VITE_`, so do not put backend secrets in frontend variables.
 
-After Vercel deploys, copy the frontend URL and add it to the backend `CORS_ORIGIN` value in Render.
+After Vercel deploys, copy the frontend URL and add it to the backend `CLIENT_URL` value in Render. If you have multiple allowed frontend URLs, add them to `CLIENT_URLS` separated by commas.
 
 Official docs:
 

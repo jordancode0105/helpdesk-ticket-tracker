@@ -8,19 +8,28 @@ const ticketRoutes = require("./routes/ticketRoutes");
 dotenv.config();
 
 const app = express();
-const allowedOrigins = (process.env.CORS_ORIGIN || "http://127.0.0.1:5173,http://localhost:5173")
-  .split(",")
-  .map((origin) => origin.trim());
+
+function normalizeOrigin(origin) {
+  return origin.trim().replace(/\/$/, "");
+}
+
+const localOrigins = ["http://localhost:5173", "http://127.0.0.1:5173"];
+const deployedOrigins = [process.env.CLIENT_URL, process.env.CLIENT_URLS, process.env.CORS_ORIGIN]
+  .filter(Boolean)
+  .flatMap((originList) => originList.split(","))
+  .map(normalizeOrigin)
+  .filter(Boolean);
+const allowedOrigins = [...new Set([...localOrigins, ...deployedOrigins])];
 
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin || allowedOrigins.includes(normalizeOrigin(origin))) {
         callback(null, true);
         return;
       }
 
-      callback(new Error("Not allowed by CORS"));
+      callback(null, false);
     }
   })
 );
