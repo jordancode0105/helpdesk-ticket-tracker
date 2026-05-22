@@ -2,6 +2,11 @@
 
 A full-stack IT help desk ticket tracker built for internship and entry-level IT/job applications. The app models a realistic support workflow where requesters submit issues, technicians work assigned tickets, and admins manage the queue.
 
+## Live Demo
+
+- Frontend: [https://helpdesk-ticket-tracker.vercel.app](https://helpdesk-ticket-tracker.vercel.app)
+- Backend API: [https://it-help-desk-api.onrender.com](https://it-help-desk-api.onrender.com)
+
 ## Project Overview
 
 This project demonstrates a practical internal support tool instead of a generic CRUD app. It includes authentication, role-based ticket visibility, MongoDB persistence, ticket comments, assignment workflow, status updates, priority filtering, and a clean React interface.
