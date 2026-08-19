@@ -213,6 +213,31 @@ Open:
 http://127.0.0.1:5173
 ```
 
+## Automated Backend Tests
+
+The backend integration suite uses Vitest, Supertest, and an automatically managed in-memory MongoDB instance. It creates its own test users and tickets, clears the ephemeral database between tests, and never uses seeded, development, or production data.
+
+Run the complete suite:
+
+```bash
+cd server
+npm test
+```
+
+Run in watch mode:
+
+```bash
+npm run test:watch
+```
+
+Generate the V8 coverage report:
+
+```bash
+npm run test:coverage
+```
+
+The suite covers persona signup, JWT rejection cases, role-scoped ticket visibility, requester/technician/admin permissions, both assignment paths, database non-mutation on rejected requests, and API boundary validation.
+
 ## Deployment Notes
 
 This project is deployed with Vercel for the frontend, Render for the backend API, and MongoDB Atlas for the database.
