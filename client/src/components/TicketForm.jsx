@@ -49,6 +49,8 @@ function TicketForm({ onSubmit, isSaving }) {
           value={formData.title}
           onChange={handleChange}
           placeholder="Example: Printer will not connect"
+          minLength="5"
+          maxLength="120"
           required
         />
         <span className="field-hint">Use a short summary of the issue.</span>
@@ -61,6 +63,8 @@ function TicketForm({ onSubmit, isSaving }) {
           value={formData.description}
           onChange={handleChange}
           placeholder="Describe the issue and any troubleshooting already tried."
+          minLength="10"
+          maxLength="5000"
           rows="5"
           required
         />

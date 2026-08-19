@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getTechnicians } from "../api/authApi.js";
-import { addComment, assignTicket, getTicket, updateTicket } from "../api/ticketApi.js";
+import { addComment, getTicket, updateTicket } from "../api/ticketApi.js";
 import CommentForm from "../components/CommentForm.jsx";
 import CommentList from "../components/CommentList.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -85,9 +85,9 @@ function TicketDetails() {
       if (user.role === "admin") {
         updatedTicket = await updateTicket(id, {
           status: workflowData.status,
-          priority: workflowData.priority
+          priority: workflowData.priority,
+          assignedTo: workflowData.assignedTo
         });
-        updatedTicket = await assignTicket(id, workflowData.assignedTo);
       }
 
       setTicket(updatedTicket);

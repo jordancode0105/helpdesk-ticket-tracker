@@ -1,6 +1,6 @@
 # IT Help Desk Ticket Tracker
 
-A full-stack software engineering portfolio project that demonstrates authentication, role-based workflows, database persistence, and production deployment. The app uses a help desk ticketing workflow as the product domain, where requesters submit issues, technicians work assigned tickets, and admins manage the queue.
+A full-stack software engineering portfolio simulator that demonstrates authentication, role-based workflows, database persistence, and production deployment. The app uses a help desk ticketing workflow as the product domain, where requesters submit issues, technicians work assigned tickets, and admins manage the queue.
 
 ## Live Demo
 
@@ -13,13 +13,19 @@ The live demo uses seeded demo data and may be reset periodically. The Render ba
 
 This project demonstrates a practical role-based web application instead of a generic CRUD app. It includes authentication, protected API routes, role-aware ticket visibility, MongoDB persistence, comments, assignment workflow, status updates, priority filtering, deployment configuration, and a clean React interface.
 
+### Simulator Intent and Threat Model
+
+This application is intentionally a public portfolio simulator. During signup, a reviewer chooses `requester`, `technician`, or `admin` to explore that persona's workflow. These roles do not represent privileges in a real organization, and the application contains only synthetic demo data.
+
+After a persona is selected, the backend enforces that role's permissions on every API request. Requesters can act only on tickets they created, technicians can act only on tickets assigned to them and can change only status, and admins manage the synthetic queue. Changing the UI or calling the API directly must not bypass those rules.
+
 ## Why I Built This
 
 I built this project to practice and demonstrate full-stack application development from end to end: React UI, Express API design, MongoDB persistence, JWT authentication, password hashing, role-based workflows, environment configuration, and deployment with Vercel, Render, and MongoDB Atlas. The help desk domain gives the app a realistic workflow with ownership, prioritization, and status tracking, while the technical patterns apply broadly to many software engineering roles and product domains.
 
 ## Features
 
-- Signup, login, and logout
+- Persona signup, login, and logout
 - Password hashing with `bcryptjs`
 - JWT authentication stored in `localStorage`
 - Role-based users:
@@ -43,6 +49,8 @@ I built this project to practice and demonstrate full-stack application developm
 - Priority filtering
 - Dashboard cards for visible tickets
 - Comments on ticket detail pages
+- Strict server-side validation and role enforcement
+- HTTP security headers, request-size limits, and authentication rate limiting
 - Responsive, portfolio-friendly UI
 
 ## Tech Stack
@@ -106,6 +114,7 @@ server/
 Create `server/.env`:
 
 ```env
+NODE_ENV=development
 PORT=9000
 MONGO_URI=your_mongodb_connection_string
 JWT_SECRET=replace_this_with_a_long_random_secret
@@ -140,6 +149,7 @@ VITE_API_BASE_URL=https://your-render-backend.onrender.com/api
 
 Notes:
 
+- `JWT_SECRET` must contain at least 32 characters.
 - `JWT_SECRET` must be different from local/demo values.
 - `MONGO_URI` should point to the production MongoDB Atlas database.
 - `CLIENT_URL` should match the deployed frontend URL exactly.
@@ -289,9 +299,9 @@ npm.cmd run seed
 
 The seed script does not run automatically. It only runs when you manually call `npm run seed`.
 
-The live deployment uses seeded demo data. Demo records may be reset periodically to keep the project clean for portfolio review.
+The live deployment uses only seeded or reviewer-created synthetic data. Demo records may be reset periodically to keep the project clean for portfolio review.
 
-Local/demo-only accounts:
+Demo-only accounts:
 
 ```txt
 Requester

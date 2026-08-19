@@ -37,8 +37,8 @@ function Signup() {
       return;
     }
 
-    if (formData.password.length < 6) {
-      setError("Password must be at least 6 characters.");
+    if (formData.password.length < 8) {
+      setError("Password must be at least 8 characters.");
       return;
     }
 
@@ -60,7 +60,9 @@ function Signup() {
         <div>
           <p className="eyebrow">New User</p>
           <h2>Signup</h2>
-          <p className="helper-text">Choose a role to test requester, technician, or admin workflows.</p>
+          <p className="helper-text">
+            Choose a role to explore the simulator from that persona&apos;s point of view.
+          </p>
         </div>
       </div>
 
@@ -97,8 +99,9 @@ function Signup() {
             type="password"
             value={formData.password}
             onChange={handleChange}
-            minLength="6"
-            placeholder="At least 6 characters"
+            minLength="8"
+            maxLength="72"
+            placeholder="8 to 72 characters"
             required
           />
         </label>

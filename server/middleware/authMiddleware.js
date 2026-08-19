@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const environment = require("../config/env");
 
 async function protect(req, res, next) {
   try {
@@ -10,7 +11,11 @@ async function protect(req, res, next) {
     }
 
     const token = authHeader.split(" ")[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, environment.JWT_SECRET, {
+      algorithms: ["HS256"],
+      audience: environment.JWT_AUDIENCE,
+      issuer: environment.JWT_ISSUER
+    });
 
     req.user = await User.findById(decoded.userId).select("-password");
 

@@ -2,6 +2,15 @@ const express = require("express");
 const Ticket = require("../models/Ticket");
 const User = require("../models/User");
 const { protect } = require("../middleware/authMiddleware");
+const validateRequest = require("../middleware/validateRequest");
+const {
+  addCommentSchema,
+  assignTicketSchema,
+  createTicketSchema,
+  ticketIdSchema,
+  ticketListSchema,
+  updateTicketSchema
+} = require("../validation/requestSchemas");
 
 const router = express.Router();
 
@@ -82,8 +91,10 @@ function buildTicketQuery(req) {
     query.assignedTo = req.user._id;
   }
 
-  if (req.query.priority && req.query.priority !== "All") {
-    query.priority = req.query.priority;
+  const { priority } = req.validated.query;
+
+  if (priority && priority !== "All") {
+    query.priority = priority;
   }
 
   return query;
@@ -96,7 +107,7 @@ function populateTicketQuery(query) {
     .populate("comments.user", "name email role");
 }
 
-router.get("/", async (req, res) => {
+router.get("/", validateRequest(ticketListSchema), async (req, res) => {
   try {
     const tickets = await populateTicketQuery(Ticket.find(buildTicketQuery(req))).sort({
       createdAt: -1
@@ -108,18 +119,18 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.post("/", async (req, res) => {
+router.post("/", validateRequest(createTicketSchema), async (req, res) => {
   if (req.user.role === "technician") {
     return res.status(403).json({ message: "Technicians cannot create tickets" });
   }
 
   try {
+    const { title, description, category, priority } = req.validated.body;
     const newTicket = await Ticket.create({
-      title: req.body.title,
-      description: req.body.description,
-      category: req.body.category || "Other",
-      status: req.body.status || "Open",
-      priority: req.body.priority || "Medium",
+      title,
+      description,
+      category: category || "Other",
+      priority: priority || "Medium",
       createdBy: req.user._id
     });
 
@@ -131,9 +142,9 @@ router.post("/", async (req, res) => {
   }
 });
 
-router.get("/:id", async (req, res) => {
+router.get("/:id", validateRequest(ticketIdSchema), async (req, res) => {
   try {
-    const ticket = await populateTicketQuery(Ticket.findById(req.params.id));
+    const ticket = await populateTicketQuery(Ticket.findById(req.validated.params.id));
 
     if (!ticket) {
       return res.status(404).json({ message: "Ticket not found" });
@@ -145,13 +156,13 @@ router.get("/:id", async (req, res) => {
 
     res.json(formatTicket(ticket));
   } catch (error) {
-    res.status(404).json({ message: "Ticket not found" });
+    res.status(500).json({ message: "Unable to get ticket" });
   }
 });
 
-router.put("/:id", async (req, res) => {
+router.put("/:id", validateRequest(updateTicketSchema), async (req, res) => {
   try {
-    const ticket = await Ticket.findById(req.params.id);
+    const ticket = await Ticket.findById(req.validated.params.id);
 
     if (!ticket) {
       return res.status(404).json({ message: "Ticket not found" });
@@ -165,14 +176,43 @@ router.put("/:id", async (req, res) => {
       return res.status(403).json({ message: "Requesters cannot update workflow fields" });
     }
 
+    const updates = req.validated.body;
+
     if (req.user.role === "technician") {
-      ticket.status = req.body.status || ticket.status;
+      const requestedFields = Object.keys(updates);
+
+      if (requestedFields.length !== 1 || requestedFields[0] !== "status") {
+        return res.status(403).json({
+          message: "Technicians can only update the status of assigned tickets"
+        });
+      }
+
+      ticket.status = updates.status;
     }
 
     if (req.user.role === "admin") {
-      ticket.status = req.body.status || ticket.status;
-      ticket.priority = req.body.priority || ticket.priority;
-      ticket.assignedTo = req.body.assignedTo === "" ? null : req.body.assignedTo || ticket.assignedTo;
+      if (Object.hasOwn(updates, "assignedTo") && updates.assignedTo) {
+        const technicianExists = await User.exists({
+          _id: updates.assignedTo,
+          role: "technician"
+        });
+
+        if (!technicianExists) {
+          return res.status(400).json({ message: "Assigned user must be a technician" });
+        }
+      }
+
+      if (Object.hasOwn(updates, "status")) {
+        ticket.status = updates.status;
+      }
+
+      if (Object.hasOwn(updates, "priority")) {
+        ticket.priority = updates.priority;
+      }
+
+      if (Object.hasOwn(updates, "assignedTo")) {
+        ticket.assignedTo = updates.assignedTo || null;
+      }
     }
 
     await ticket.save();
@@ -184,13 +224,13 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", validateRequest(ticketIdSchema), async (req, res) => {
   if (req.user.role !== "admin") {
     return res.status(403).json({ message: "Only admins can delete tickets" });
   }
 
   try {
-    const ticket = await Ticket.findByIdAndDelete(req.params.id);
+    const ticket = await Ticket.findByIdAndDelete(req.validated.params.id);
 
     if (!ticket) {
       return res.status(404).json({ message: "Ticket not found" });
@@ -202,9 +242,9 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
-router.post("/:id/comments", async (req, res) => {
+router.post("/:id/comments", validateRequest(addCommentSchema), async (req, res) => {
   try {
-    const ticket = await Ticket.findById(req.params.id);
+    const ticket = await Ticket.findById(req.validated.params.id);
 
     if (!ticket) {
       return res.status(404).json({ message: "Ticket not found" });
@@ -215,7 +255,7 @@ router.post("/:id/comments", async (req, res) => {
     }
 
     ticket.comments.push({
-      text: req.body.text,
+      text: req.validated.body.text,
       user: req.user._id
     });
 
@@ -229,21 +269,22 @@ router.post("/:id/comments", async (req, res) => {
   }
 });
 
-router.patch("/:id/assign", async (req, res) => {
+router.patch("/:id/assign", validateRequest(assignTicketSchema), async (req, res) => {
   if (req.user.role !== "admin") {
     return res.status(403).json({ message: "Only admins can assign tickets" });
   }
 
   try {
-    const ticket = await Ticket.findById(req.params.id);
+    const { assignedTo } = req.validated.body;
+    const ticket = await Ticket.findById(req.validated.params.id);
 
     if (!ticket) {
       return res.status(404).json({ message: "Ticket not found" });
     }
 
-    if (req.body.assignedTo) {
+    if (assignedTo) {
       const technician = await User.findOne({
-        _id: req.body.assignedTo,
+        _id: assignedTo,
         role: "technician"
       });
 
@@ -252,7 +293,7 @@ router.patch("/:id/assign", async (req, res) => {
       }
     }
 
-    ticket.assignedTo = req.body.assignedTo || null;
+    ticket.assignedTo = assignedTo || null;
     const updatedTicket = await ticket.save();
     const populatedTicket = await populateTicketQuery(Ticket.findById(updatedTicket._id));
 

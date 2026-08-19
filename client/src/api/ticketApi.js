@@ -83,16 +83,3 @@ export async function updateTicket(ticketId, ticketData) {
 
   return handleResponse(response);
 }
-
-export async function assignTicket(ticketId, assignedTo) {
-  const response = await fetch(`${API_BASE_URL}/tickets/${ticketId}/assign`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      ...getAuthHeaders()
-    },
-    body: JSON.stringify({ assignedTo })
-  });
-
-  return handleResponse(response);
-}

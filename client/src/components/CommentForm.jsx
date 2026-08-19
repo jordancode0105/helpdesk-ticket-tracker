@@ -27,6 +27,8 @@ function CommentForm({ onSubmit, isSaving }) {
           value={text}
           onChange={(event) => setText(event.target.value)}
           placeholder="Add a troubleshooting note or update."
+          minLength="3"
+          maxLength="2000"
           rows="3"
           required
         />
