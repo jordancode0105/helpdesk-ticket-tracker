@@ -45,6 +45,13 @@ export async function getTicket(id) {
   return handleResponse(response);
 }
 
+export async function getTicketActivity(id) {
+  const response = await fetch(`${API_BASE_URL}/tickets/${id}/activity`, {
+    headers: getAuthHeaders()
+  });
+  return handleResponse(response);
+}
+
 export async function createTicket(ticketData) {
   const response = await fetch(`${API_BASE_URL}/tickets`, {
     method: "POST",

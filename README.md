@@ -13,7 +13,7 @@ The live demo uses seeded demo data and may be reset periodically. The Render ba
 
 ## Project Overview
 
-This project demonstrates a practical role-based web application instead of a generic CRUD app. It includes authentication, protected API routes, role-aware ticket visibility, MongoDB persistence, comments, assignment workflow, status updates, priority filtering, deployment configuration, and a clean React interface.
+This project demonstrates a practical role-based web application instead of a generic CRUD app. It includes authentication, protected API routes, role-aware ticket visibility, explicit workflow transitions, a durable ticket audit trail, MongoDB persistence, comments, assignment workflow, priority filtering, deployment configuration, and a clean React interface.
 
 ### Simulator Intent and Threat Model
 
@@ -51,9 +51,28 @@ I built this project to practice and demonstrate full-stack application developm
 - Priority filtering
 - Dashboard cards for visible tickets
 - Comments on ticket detail pages
+- Structured activity history for creation, workflow, assignment, priority, and comment events
+- Explicit server-enforced status transitions for technicians and admins
 - Strict server-side validation and role enforcement
 - HTTP security headers, request-size limits, and authentication rate limiting
 - Responsive, portfolio-friendly UI
+
+## Activity History and Workflow Rules
+
+Every meaningful ticket mutation appends a structured, immutable activity subdocument to the ticket. Events use an enum-backed type instead of free-form descriptions and record the ticket, actor, timestamp, deterministic per-ticket sequence, typed previous/new values, and relevant metadata such as the comment id. The current event types are ticket creation, status change, priority change, technician assignment, technician unassignment, and comment addition.
+
+The activity array is excluded from normal ticket list/detail queries and is exposed through a dedicated authorized endpoint. It is embedded because ticket fields, comments, and their corresponding audit events can then be committed in one atomic MongoDB document write. Optimistic concurrency prevents two stale document saves from silently overwriting one another. This is an append-only audit trail, not full event sourcing: the ticket document remains the source of current state. The existing hard-delete operation removes the ticket and its embedded history together; it does not create an immediately inaccessible deletion event. A future archival workflow could preserve and record that lifecycle event.
+
+Status transitions are defined centrally on the server:
+
+| Current status | Allowed technician transitions | Allowed admin transitions |
+| --- | --- | --- |
+| Open | In Progress, Resolved | In Progress, Resolved, Closed |
+| In Progress | Open, Resolved | Open, Resolved, Closed |
+| Resolved | In Progress | Open, In Progress, Closed |
+| Closed | None | Open, In Progress, Resolved |
+
+Technicians must also be assigned to the ticket and may change only status. Requesters cannot change workflow fields. Submitting an unchanged value is a no-op and does not create a misleading event. These rules, the auditable history, and atomic multi-field admin updates demonstrate domain invariants and consistency concerns beyond ordinary CRUD handlers.
 
 ## Tech Stack
 
@@ -105,6 +124,7 @@ client/
     styles/
 server/
   config/
+  domain/
   middleware/
   models/
   routes/
@@ -217,7 +237,7 @@ http://127.0.0.1:5173
 
 ## Automated Backend Tests
 
-The backend integration suite contains 61 tests using Vitest, Supertest, and an automatically managed in-memory MongoDB instance. It creates its own test users and tickets, clears the ephemeral database between tests, and never uses seeded, development, or production data.
+The backend integration suite contains 85 tests using Vitest, Supertest, and an automatically managed in-memory MongoDB instance. It creates its own test users and tickets, clears the ephemeral database between tests, and never uses seeded, development, or production data.
 
 Run the complete suite:
 
@@ -238,7 +258,7 @@ Generate the V8 coverage report:
 npm run test:coverage
 ```
 
-The suite covers persona signup, JWT rejection cases, role-scoped ticket visibility, requester/technician/admin permissions, both assignment paths, database non-mutation on rejected requests, and API boundary validation.
+The suite covers persona signup, JWT rejection cases, role-scoped ticket visibility, requester/technician/admin permissions, both assignment paths, database non-mutation on rejected requests, API boundary validation, the complete technician transition matrix, representative admin transitions, activity authorization, event contents and ordering, comment/creation events, and rejected-mutation audit safety.
 
 Coverage regression protection currently requires at least 80% statements, 70% branches, 80% functions, and 80% lines. These thresholds are deliberately below the current coverage so they catch substantial regressions without encouraging tests written only to preserve an arbitrary percentage.
 
@@ -376,7 +396,7 @@ Role: admin
 
 The password `Password123!` is for local demo use only. Do not reuse it for real accounts or production deployments.
 
-The seed script hashes demo passwords with `bcryptjs`, upserts the demo users, removes old demo tickets for those demo users, and recreates a small sample ticket queue.
+The seed script hashes demo passwords with `bcryptjs`, upserts the demo users, removes old demo tickets for those demo users, and recreates a small sample ticket queue with representative activity histories.
 
 ## Testing The Role Workflow
 
@@ -393,6 +413,7 @@ The seed script hashes demo passwords with `bcryptjs`, upserts the demo users, r
 11. Update the ticket status.
 12. Logout and login as the requester.
 13. Confirm the requester can still track their ticket status.
+14. Open the ticket detail page and confirm the activity timeline identifies each actor and change.
 
 ## API Routes
 
@@ -411,6 +432,7 @@ Tickets:
 GET    /api/tickets
 POST   /api/tickets
 GET    /api/tickets/:id
+GET    /api/tickets/:id/activity
 PUT    /api/tickets/:id
 DELETE /api/tickets/:id
 POST   /api/tickets/:id/comments
@@ -419,10 +441,8 @@ PATCH  /api/tickets/:id/assign
 
 ## Future Improvements
 
-- Better role permissions for closing or reopening tickets
 - Search by title or description
 - Pagination for large ticket queues
 - File attachments
 - Email notifications
 - Admin user management page
-- Automated tests with Jest, Supertest, or Playwright

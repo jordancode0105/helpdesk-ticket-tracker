@@ -20,6 +20,7 @@ export default defineConfig({
       include: [
         "app.js",
         "config/**/*.js",
+        "domain/**/*.js",
         "middleware/**/*.js",
         "models/**/*.js",
         "routes/**/*.js",

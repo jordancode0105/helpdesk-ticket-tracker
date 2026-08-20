@@ -87,6 +87,56 @@ const assignTicketSchema = requestSchema({
     .strict()
 });
 
+const activityUserResponseSchema = z
+  .object({
+    id: objectId,
+    name: z.string().min(1).max(80),
+    role: z.enum(roles)
+  })
+  .strict();
+
+const activityValueResponseSchema = z
+  .object({
+    status: z.enum(statuses).optional(),
+    priority: z.enum(priorities).optional(),
+    user: activityUserResponseSchema.nullable().optional()
+  })
+  .strict();
+
+const activityMetadataResponseSchema = z
+  .object({
+    commentId: objectId.optional(),
+    reason: z.string().max(500).optional()
+  })
+  .strict();
+
+const ticketActivityResponseSchema = z
+  .object({
+    ticketId: objectId,
+    events: z.array(
+      z
+        .object({
+          id: objectId,
+          type: z.enum([
+            "ticket_created",
+            "status_changed",
+            "priority_changed",
+            "technician_assigned",
+            "technician_unassigned",
+            "comment_added"
+          ]),
+          sequence: z.number().int().positive(),
+          createdAt: z.string().datetime(),
+          actor: activityUserResponseSchema.nullable(),
+          previousValue: activityValueResponseSchema.nullable(),
+          newValue: activityValueResponseSchema.nullable(),
+          metadata: activityMetadataResponseSchema.nullable()
+        })
+        .strict()
+    )
+  })
+  .strict();
+
 module.exports = {
   addCommentSchema,
   assignTicketSchema,
@@ -95,6 +145,7 @@ module.exports = {
   loginSchema,
   signupSchema,
   ticketIdSchema,
+  ticketActivityResponseSchema,
   ticketListSchema,
   updateTicketSchema
 };

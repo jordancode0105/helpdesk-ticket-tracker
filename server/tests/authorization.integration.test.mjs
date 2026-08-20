@@ -24,6 +24,10 @@ function authorization(persona) {
   return { Authorization: persona.authorization };
 }
 
+async function storedTicketWithActivity(ticketId) {
+  return Ticket.findById(ticketId).select("+activities +activitySequence");
+}
+
 function signTestToken(userId, overrides = {}) {
   const secret = overrides.secret || environment.JWT_SECRET;
   const options = {
@@ -824,5 +828,363 @@ describe("validation and API boundaries", () => {
     expect(response.status).toBe(413);
     expect(response.body.code).toBe("PAYLOAD_TOO_LARGE");
     expect(await Ticket.countDocuments()).toBe(0);
+  });
+});
+
+describe("ticket activity history and explicit workflow transitions", () => {
+  test("ticket creation records a structured creation event with the requester actor", async () => {
+    const requester = await createPersona("requester");
+    const createResponse = await api.post("/api/tickets").set(authorization(requester)).send({
+      title: "Activity history creation test",
+      description: "This ticket proves that creation is durably recorded in its activity history.",
+      priority: "High"
+    });
+
+    expect(createResponse.status).toBe(201);
+
+    const historyResponse = await api
+      .get(`/api/tickets/${createResponse.body.id}/activity`)
+      .set(authorization(requester));
+    const storedTicket = await storedTicketWithActivity(createResponse.body.id);
+
+    expect(historyResponse.status).toBe(200);
+    expect(historyResponse.body.ticketId).toBe(createResponse.body.id);
+    expect(historyResponse.body.events).toHaveLength(1);
+    expect(historyResponse.body.events[0]).toMatchObject({
+      type: "ticket_created",
+      sequence: 1,
+      actor: {
+        id: requester.user._id.toString(),
+        name: requester.user.name,
+        role: "requester"
+      },
+      previousValue: null,
+      newValue: null,
+      metadata: null
+    });
+    expect(historyResponse.body.events[0].actor).not.toHaveProperty("email");
+    expect(historyResponse.body.events[0].createdAt).toEqual(expect.any(String));
+    expect(storedTicket.activities[0].ticket.toString()).toBe(createResponse.body.id);
+  });
+
+  test("ticket activity uses the same view authorization as ticket details", async () => {
+    const requester = await createPersona("requester");
+    const otherRequester = await createPersona("requester");
+    const assignedTechnician = await createPersona("technician");
+    const otherTechnician = await createPersona("technician");
+    const admin = await createPersona("admin");
+    const ticket = await createTicket({
+      createdBy: requester.user._id,
+      assignedTo: assignedTechnician.user._id
+    });
+
+    for (const allowedPersona of [requester, assignedTechnician, admin]) {
+      const response = await api
+        .get(`/api/tickets/${ticket._id}/activity`)
+        .set(authorization(allowedPersona));
+      expect(response.status).toBe(200);
+    }
+
+    for (const deniedPersona of [otherRequester, otherTechnician]) {
+      const response = await api
+        .get(`/api/tickets/${ticket._id}/activity`)
+        .set(authorization(deniedPersona));
+      expect(response.status).toBe(403);
+    }
+  });
+
+  test("stored activity event fields cannot be rewritten through the model", async () => {
+    const requester = await createPersona("requester");
+    const otherUser = await createPersona("admin");
+    const createResponse = await api.post("/api/tickets").set(authorization(requester)).send({
+      title: "Immutable event field test",
+      description: "This ticket verifies that existing audit event fields remain immutable."
+    });
+    const storedTicket = await storedTicketWithActivity(createResponse.body.id);
+    const originalEventId = storedTicket.activities[0]._id.toString();
+
+    storedTicket.activities[0].type = "comment_added";
+    storedTicket.activities[0].sequence = 99;
+    storedTicket.activities[0].actor = otherUser.user._id;
+    await storedTicket.save();
+
+    const reloadedTicket = await storedTicketWithActivity(createResponse.body.id);
+    expect(reloadedTicket.activities[0]).toMatchObject({
+      _id: new mongoose.Types.ObjectId(originalEventId),
+      type: "ticket_created",
+      sequence: 1,
+      actor: requester.user._id
+    });
+  });
+
+  test("status and priority events preserve actor and old/new values", async () => {
+    const requester = await createPersona("requester");
+    const technician = await createPersona("technician");
+    const admin = await createPersona("admin");
+    const ticket = await createTicket({
+      createdBy: requester.user._id,
+      assignedTo: technician.user._id
+    });
+
+    const technicianResponse = await api
+      .put(`/api/tickets/${ticket._id}`)
+      .set(authorization(technician))
+      .send({ status: "In Progress" });
+    const adminResponse = await api
+      .put(`/api/tickets/${ticket._id}`)
+      .set(authorization(admin))
+      .send({ priority: "Critical" });
+    const historyResponse = await api
+      .get(`/api/tickets/${ticket._id}/activity`)
+      .set(authorization(admin));
+
+    expect(technicianResponse.status).toBe(200);
+    expect(adminResponse.status).toBe(200);
+    expect(historyResponse.body.events).toMatchObject([
+      {
+        type: "status_changed",
+        actor: { id: technician.user._id.toString() },
+        previousValue: { status: "Open" },
+        newValue: { status: "In Progress" }
+      },
+      {
+        type: "priority_changed",
+        actor: { id: admin.user._id.toString() },
+        previousValue: { priority: "Medium" },
+        newValue: { priority: "Critical" }
+      }
+    ]);
+  });
+
+  test("assignment and unassignment events preserve both technician references", async () => {
+    const requester = await createPersona("requester");
+    const firstTechnician = await createPersona("technician");
+    const secondTechnician = await createPersona("technician");
+    const admin = await createPersona("admin");
+    const ticket = await createTicket({
+      createdBy: requester.user._id,
+      assignedTo: firstTechnician.user._id
+    });
+
+    const reassignResponse = await api
+      .put(`/api/tickets/${ticket._id}`)
+      .set(authorization(admin))
+      .send({ assignedTo: secondTechnician.user._id.toString() });
+    const unassignResponse = await api
+      .patch(`/api/tickets/${ticket._id}/assign`)
+      .set(authorization(admin))
+      .send({ assignedTo: null });
+    const historyResponse = await api
+      .get(`/api/tickets/${ticket._id}/activity`)
+      .set(authorization(admin));
+
+    expect(reassignResponse.status).toBe(200);
+    expect(unassignResponse.status).toBe(200);
+    expect(historyResponse.body.events).toMatchObject([
+      {
+        type: "technician_assigned",
+        actor: { id: admin.user._id.toString() },
+        previousValue: { user: { id: firstTechnician.user._id.toString() } },
+        newValue: { user: { id: secondTechnician.user._id.toString() } }
+      },
+      {
+        type: "technician_unassigned",
+        actor: { id: admin.user._id.toString() },
+        previousValue: { user: { id: secondTechnician.user._id.toString() } },
+        newValue: null
+      }
+    ]);
+  });
+
+  test("comment creation records the actor and comment reference atomically", async () => {
+    const requester = await createPersona("requester");
+    const ticket = await createTicket({ createdBy: requester.user._id });
+    const commentResponse = await api
+      .post(`/api/tickets/${ticket._id}/comments`)
+      .set(authorization(requester))
+      .send({ text: "This comment should appear in the durable activity history." });
+    const historyResponse = await api
+      .get(`/api/tickets/${ticket._id}/activity`)
+      .set(authorization(requester));
+
+    expect(commentResponse.status).toBe(201);
+    expect(historyResponse.body.events).toMatchObject([
+      {
+        type: "comment_added",
+        actor: { id: requester.user._id.toString() },
+        metadata: { commentId: commentResponse.body.id }
+      }
+    ]);
+
+    const storedTicket = await storedTicketWithActivity(ticket._id);
+    expect(storedTicket.comments).toHaveLength(1);
+    expect(storedTicket.activities).toHaveLength(1);
+  });
+
+  test("rejected mutations create no activity events", async () => {
+    const requester = await createPersona("requester");
+    const technician = await createPersona("technician");
+    const admin = await createPersona("admin");
+    const invalidAssignee = await createPersona("requester");
+    const ticket = await createTicket({
+      createdBy: requester.user._id,
+      assignedTo: technician.user._id
+    });
+
+    const requesterResponse = await api
+      .put(`/api/tickets/${ticket._id}`)
+      .set(authorization(requester))
+      .send({ priority: "High" });
+    const technicianResponse = await api
+      .put(`/api/tickets/${ticket._id}`)
+      .set(authorization(technician))
+      .send({ status: "Closed" });
+    const adminResponse = await api
+      .patch(`/api/tickets/${ticket._id}/assign`)
+      .set(authorization(admin))
+      .send({ assignedTo: invalidAssignee.user._id.toString() });
+    const storedTicket = await storedTicketWithActivity(ticket._id);
+
+    expect(requesterResponse.status).toBe(403);
+    expect(technicianResponse.status).toBe(403);
+    expect(adminResponse.status).toBe(400);
+    expect(storedTicket.status).toBe("Open");
+    expect(storedTicket.priority).toBe("Medium");
+    expect(storedTicket.assignedTo.toString()).toBe(technician.user._id.toString());
+    expect(storedTicket.activities).toHaveLength(0);
+  });
+
+  test.each([
+    ["Open", "In Progress"],
+    ["Open", "Resolved"],
+    ["In Progress", "Open"],
+    ["In Progress", "Resolved"],
+    ["Resolved", "In Progress"]
+  ])("an assigned technician may transition %s to %s", async (from, to) => {
+    const requester = await createPersona("requester");
+    const technician = await createPersona("technician");
+    const ticket = await createTicket({
+      createdBy: requester.user._id,
+      assignedTo: technician.user._id,
+      status: from
+    });
+
+    const response = await api
+      .put(`/api/tickets/${ticket._id}`)
+      .set(authorization(technician))
+      .send({ status: to });
+    const storedTicket = await storedTicketWithActivity(ticket._id);
+
+    expect(response.status).toBe(200);
+    expect(storedTicket.status).toBe(to);
+    expect(storedTicket.activities).toHaveLength(1);
+  });
+
+  test.each([
+    ["Open", "Closed"],
+    ["In Progress", "Closed"],
+    ["Resolved", "Open"],
+    ["Resolved", "Closed"],
+    ["Closed", "Open"],
+    ["Closed", "In Progress"],
+    ["Closed", "Resolved"]
+  ])("an assigned technician may not transition %s to %s", async (from, to) => {
+    const requester = await createPersona("requester");
+    const technician = await createPersona("technician");
+    const ticket = await createTicket({
+      createdBy: requester.user._id,
+      assignedTo: technician.user._id,
+      status: from
+    });
+
+    const response = await api
+      .put(`/api/tickets/${ticket._id}`)
+      .set(authorization(technician))
+      .send({ status: to });
+    const storedTicket = await storedTicketWithActivity(ticket._id);
+
+    expect(response.status).toBe(403);
+    expect(storedTicket.status).toBe(from);
+    expect(storedTicket.activities).toHaveLength(0);
+  });
+
+  test.each([
+    ["Open", "Closed"],
+    ["Resolved", "Open"],
+    ["Closed", "In Progress"]
+  ])("an admin may transition %s to %s", async (from, to) => {
+    const requester = await createPersona("requester");
+    const admin = await createPersona("admin");
+    const ticket = await createTicket({ createdBy: requester.user._id, status: from });
+
+    const response = await api
+      .put(`/api/tickets/${ticket._id}`)
+      .set(authorization(admin))
+      .send({ status: to });
+    const storedTicket = await storedTicketWithActivity(ticket._id);
+
+    expect(response.status).toBe(200);
+    expect(storedTicket.status).toBe(to);
+    expect(storedTicket.activities[0]).toMatchObject({
+      type: "status_changed",
+      previousValue: { status: from },
+      newValue: { status: to }
+    });
+  });
+
+  test("a combined admin update creates one ordered event per changed field", async () => {
+    const requester = await createPersona("requester");
+    const technician = await createPersona("technician");
+    const admin = await createPersona("admin");
+    const ticket = await createTicket({ createdBy: requester.user._id });
+
+    const response = await api
+      .put(`/api/tickets/${ticket._id}`)
+      .set(authorization(admin))
+      .send({
+        status: "Closed",
+        priority: "Critical",
+        assignedTo: technician.user._id.toString()
+      });
+    const historyResponse = await api
+      .get(`/api/tickets/${ticket._id}/activity`)
+      .set(authorization(admin));
+
+    expect(response.status).toBe(200);
+    expect(historyResponse.status).toBe(200);
+    expect(historyResponse.body.events.map((event) => event.sequence)).toEqual([1, 2, 3]);
+    expect(historyResponse.body.events.map((event) => event.type)).toEqual([
+      "status_changed",
+      "priority_changed",
+      "technician_assigned"
+    ]);
+    expect(
+      historyResponse.body.events.every(
+        (event) => event.actor.id === admin.user._id.toString()
+      )
+    ).toBe(true);
+  });
+
+  test("submitting unchanged workflow values does not create misleading events", async () => {
+    const requester = await createPersona("requester");
+    const technician = await createPersona("technician");
+    const admin = await createPersona("admin");
+    const ticket = await createTicket({
+      createdBy: requester.user._id,
+      assignedTo: technician.user._id
+    });
+
+    const response = await api
+      .put(`/api/tickets/${ticket._id}`)
+      .set(authorization(admin))
+      .send({
+        status: "Open",
+        priority: "Medium",
+        assignedTo: technician.user._id.toString()
+      });
+    const storedTicket = await storedTicketWithActivity(ticket._id);
+
+    expect(response.status).toBe(200);
+    expect(storedTicket.activities).toHaveLength(0);
   });
 });

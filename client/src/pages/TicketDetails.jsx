@@ -1,18 +1,26 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getTechnicians } from "../api/authApi.js";
-import { addComment, getTicket, updateTicket } from "../api/ticketApi.js";
+import { addComment, getTicket, getTicketActivity, updateTicket } from "../api/ticketApi.js";
+import ActivityTimeline from "../components/ActivityTimeline.jsx";
 import CommentForm from "../components/CommentForm.jsx";
 import CommentList from "../components/CommentList.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 
 const statuses = ["Open", "In Progress", "Resolved", "Closed"];
 const priorities = ["Low", "Medium", "High", "Critical"];
+const technicianStatusOptions = {
+  Open: ["Open", "In Progress", "Resolved"],
+  "In Progress": ["In Progress", "Open", "Resolved"],
+  Resolved: ["Resolved", "In Progress"],
+  Closed: ["Closed"]
+};
 
 function TicketDetails() {
   const { id } = useParams();
   const { user } = useAuth();
   const [ticket, setTicket] = useState(null);
+  const [activity, setActivity] = useState([]);
   const [technicians, setTechnicians] = useState([]);
   const [workflowData, setWorkflowData] = useState({
     status: "Open",
@@ -27,8 +35,12 @@ function TicketDetails() {
   useEffect(() => {
     async function loadTicket() {
       try {
-        const ticketData = await getTicket(id);
+        const [ticketData, activityData] = await Promise.all([
+          getTicket(id),
+          getTicketActivity(id)
+        ]);
         setTicket(ticketData);
+        setActivity(activityData.events);
         setWorkflowData({
           status: ticketData.status,
           priority: ticketData.priority,
@@ -70,6 +82,11 @@ function TicketDetails() {
     }));
   }
 
+  async function refreshActivity() {
+    const activityData = await getTicketActivity(id);
+    setActivity(activityData.events);
+  }
+
   async function handleWorkflowSubmit(event) {
     event.preventDefault();
     setIsSavingWorkflow(true);
@@ -96,6 +113,7 @@ function TicketDetails() {
         priority: updatedTicket.priority,
         assignedTo: updatedTicket.assignedTo ? updatedTicket.assignedTo.id : ""
       });
+      await refreshActivity();
     } catch (apiError) {
       setError(apiError.message);
     } finally {
@@ -114,6 +132,7 @@ function TicketDetails() {
         ...currentTicket,
         comments: [...currentTicket.comments, newComment]
       }));
+      await refreshActivity();
     } catch (apiError) {
       setError(apiError.message);
     } finally {
@@ -128,6 +147,9 @@ function TicketDetails() {
   if (error && !ticket) {
     return <p className="error-message">{error}</p>;
   }
+
+  const availableStatuses =
+    user.role === "admin" ? statuses : technicianStatusOptions[ticket.status];
 
   return (
     <section className="page-section">
@@ -180,7 +202,9 @@ function TicketDetails() {
             <p className="helper-text">
               {user.role === "admin"
                 ? "Admins can assign technicians and adjust status or priority."
-                : "Technicians can move assigned tickets through the status workflow."}
+                : ticket.status === "Closed"
+                  ? "Closed tickets can only be reopened by an admin."
+                  : "Technicians can start work, resolve work, or reopen a resolution on assigned tickets."}
             </p>
           </div>
 
@@ -188,7 +212,7 @@ function TicketDetails() {
             <label>
               Status
               <select name="status" value={workflowData.status} onChange={handleWorkflowChange}>
-                {statuses.map((status) => (
+                {availableStatuses.map((status) => (
                   <option key={status} value={status}>
                     {status}
                   </option>
@@ -227,12 +251,31 @@ function TicketDetails() {
               </>
             )}
 
-            <button className="button" type="submit" disabled={isSavingWorkflow}>
+            <button
+              className="button"
+              type="submit"
+              disabled={
+                isSavingWorkflow ||
+                (user.role === "technician" && availableStatuses.length === 1)
+              }
+            >
               {isSavingWorkflow ? "Saving..." : "Save Workflow"}
             </button>
           </form>
         </section>
       )}
+
+      <section className="activity-section">
+        <div className="page-heading compact">
+          <div>
+            <p className="eyebrow">Audit trail</p>
+            <h2>Activity</h2>
+            <p className="helper-text">A chronological record of meaningful ticket changes.</p>
+          </div>
+        </div>
+
+        <ActivityTimeline events={activity} />
+      </section>
 
       <section className="comments-section">
         <div className="page-heading compact">

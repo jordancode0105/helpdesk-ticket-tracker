@@ -3,6 +3,7 @@ const dotenv = require("dotenv");
 const mongoose = require("mongoose");
 const Ticket = require("../models/Ticket");
 const User = require("../models/User");
+const { ACTIVITY_TYPES, appendTicketActivity } = require("../domain/ticketActivity");
 
 dotenv.config();
 
@@ -62,7 +63,7 @@ async function seedDemoData() {
     }
   });
 
-  await Ticket.create([
+  const demoTickets = [
     {
       title: "VPN connection fails from home",
       description:
@@ -131,7 +132,52 @@ async function seedDemoData() {
         }
       ]
     }
-  ]);
+  ];
+
+  for (const ticketData of demoTickets) {
+    const ticket = new Ticket(ticketData);
+
+    appendTicketActivity(ticket, {
+      actor: ticket.createdBy,
+      type: ACTIVITY_TYPES.TICKET_CREATED
+    });
+
+    if (ticket.priority !== "Medium") {
+      appendTicketActivity(ticket, {
+        actor: admin._id,
+        type: ACTIVITY_TYPES.PRIORITY_CHANGED,
+        previousValue: { priority: "Medium" },
+        newValue: { priority: ticket.priority }
+      });
+    }
+
+    if (ticket.assignedTo) {
+      appendTicketActivity(ticket, {
+        actor: admin._id,
+        type: ACTIVITY_TYPES.TECHNICIAN_ASSIGNED,
+        newValue: { user: ticket.assignedTo }
+      });
+    }
+
+    if (ticket.status !== "Open") {
+      appendTicketActivity(ticket, {
+        actor: ticket.status === "Closed" ? admin._id : ticket.assignedTo || admin._id,
+        type: ACTIVITY_TYPES.STATUS_CHANGED,
+        previousValue: { status: "Open" },
+        newValue: { status: ticket.status }
+      });
+    }
+
+    for (const comment of ticket.comments) {
+      appendTicketActivity(ticket, {
+        actor: comment.user,
+        type: ACTIVITY_TYPES.COMMENT_ADDED,
+        metadata: { commentId: comment._id }
+      });
+    }
+
+    await ticket.save();
+  }
 
   console.log("Demo users and tickets seeded successfully.");
   console.log("Demo password for all accounts: Password123!");
