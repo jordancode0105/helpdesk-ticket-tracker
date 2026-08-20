@@ -5,6 +5,10 @@
   "private": true,
   "scripts": {
     "server": "npm run dev --prefix server",
-    "client": "npm run dev --prefix client"
+    "client": "npm run dev --prefix client",
+    "check": "npm run check:server && npm run check:client",
+    "check:server": "npm run check:syntax --prefix server && npm run test:coverage --prefix server",
+    "check:client": "npm run build --prefix client",
+    "audit": "npm audit --audit-level=high --prefix server && npm audit --audit-level=high --prefix client"
   }
 }

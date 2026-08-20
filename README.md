@@ -1,5 +1,7 @@
 # IT Help Desk Ticket Tracker
 
+[![CI](https://github.com/jordancode0105/helpdesk-ticket-tracker/actions/workflows/ci.yml/badge.svg)](https://github.com/jordancode0105/helpdesk-ticket-tracker/actions/workflows/ci.yml)
+
 A full-stack software engineering portfolio simulator that demonstrates authentication, role-based workflows, database persistence, and production deployment. The app uses a help desk ticketing workflow as the product domain, where requesters submit issues, technicians work assigned tickets, and admins manage the queue.
 
 ## Live Demo
@@ -215,7 +217,7 @@ http://127.0.0.1:5173
 
 ## Automated Backend Tests
 
-The backend integration suite uses Vitest, Supertest, and an automatically managed in-memory MongoDB instance. It creates its own test users and tickets, clears the ephemeral database between tests, and never uses seeded, development, or production data.
+The backend integration suite contains 61 tests using Vitest, Supertest, and an automatically managed in-memory MongoDB instance. It creates its own test users and tickets, clears the ephemeral database between tests, and never uses seeded, development, or production data.
 
 Run the complete suite:
 
@@ -237,6 +239,33 @@ npm run test:coverage
 ```
 
 The suite covers persona signup, JWT rejection cases, role-scoped ticket visibility, requester/technician/admin permissions, both assignment paths, database non-mutation on rejected requests, and API boundary validation.
+
+Coverage regression protection currently requires at least 80% statements, 70% branches, 80% functions, and 80% lines. These thresholds are deliberately below the current coverage so they catch substantial regressions without encouraging tests written only to preserve an arbitrary percentage.
+
+## Continuous Integration
+
+The `CI` GitHub Actions workflow is configured to run for pull requests targeting `main` and pushes to `main`. The status badge above will reflect GitHub's result after the workflow is available on the default branch; this documentation does not assume that a remote run has already passed.
+
+The backend job uses Node.js 22.19.0 to:
+
+- install locked dependencies with `npm ci`
+- check server and test JavaScript syntax
+- run all backend integration tests against only the ephemeral MongoDB instance
+- run coverage and enforce the configured thresholds
+- fail on high or critical npm dependency advisories
+
+The frontend job independently uses Node.js 22.19.0 to:
+
+- install locked dependencies with `npm ci`
+- create the production Vite build
+- fail on high or critical npm dependency advisories
+
+Run the principal checks locally from the repository root:
+
+```bash
+npm run check
+npm run audit
+```
 
 ## Deployment Notes
 
