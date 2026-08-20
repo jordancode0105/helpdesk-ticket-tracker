@@ -201,7 +201,8 @@ textarea {
 .ticket-card,
 .detail-panel,
 .form-card,
-.comments-section {
+.comments-section,
+.activity-section {
   background: #ffffff;
   border: 1px solid #dce4ef;
   border-radius: 8px;
@@ -276,6 +277,7 @@ textarea {
 
 .form-card,
 .comments-section,
+.activity-section,
 .workflow-panel {
   display: grid;
   gap: 16px;
@@ -380,6 +382,64 @@ textarea:focus {
 .comment-form {
   display: grid;
   gap: 12px;
+}
+
+.activity-timeline {
+  display: grid;
+  gap: 0;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.activity-event {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 14px 1fr;
+  padding-bottom: 20px;
+  position: relative;
+}
+
+.activity-event:not(:last-child)::before {
+  background: #dce4ef;
+  content: "";
+  height: 100%;
+  left: 6px;
+  position: absolute;
+  top: 12px;
+  width: 2px;
+}
+
+.activity-event:last-child {
+  padding-bottom: 0;
+}
+
+.activity-marker {
+  background: #1d4ed8;
+  border: 3px solid #dbeafe;
+  border-radius: 999px;
+  height: 14px;
+  margin-top: 5px;
+  position: relative;
+  width: 14px;
+  z-index: 1;
+}
+
+.activity-event-header {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.activity-event p {
+  color: #273852;
+  margin: 4px 0;
+}
+
+.activity-event time {
+  color: #5b6b84;
+  font-size: 0.85rem;
 }
 
 .workflow-panel h2 {
