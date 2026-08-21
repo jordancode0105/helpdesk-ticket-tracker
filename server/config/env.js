@@ -25,6 +25,9 @@ function isHttpUrlList(value) {
 const environmentSchema = z
   .object({
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+    LOG_LEVEL: z
+      .enum(["trace", "debug", "info", "warn", "error", "fatal", "silent"])
+      .default("info"),
     PORT: z.coerce.number().int().min(1).max(65535).default(5000),
     MONGO_URI: z
       .string()

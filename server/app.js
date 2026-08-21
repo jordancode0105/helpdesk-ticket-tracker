@@ -2,7 +2,10 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const environment = require("./config/env");
+const logger = require("./config/logger");
+const { requestContext } = require("./middleware/requestContext");
 const authRoutes = require("./routes/authRoutes");
+const healthRoutes = require("./routes/healthRoutes");
 const ticketRoutes = require("./routes/ticketRoutes");
 
 const app = express();
@@ -10,6 +13,8 @@ const app = express();
 if (environment.NODE_ENV === "production") {
   app.set("trust proxy", 1);
 }
+
+app.use(requestContext);
 
 function normalizeOrigin(origin) {
   return origin.trim().replace(/\/$/, "");
@@ -42,6 +47,8 @@ app.use(
 );
 app.use(express.json({ limit: "32kb", strict: true }));
 
+app.use("/health", healthRoutes);
+
 app.get("/", (req, res) => {
   res.json({ message: "IT Help Desk Ticket Tracker API is running." });
 });
@@ -68,8 +75,21 @@ app.use((error, req, res, next) => {
     });
   }
 
-  console.error(`Unhandled request error: ${error.message}`);
-  return res.status(500).json({ message: "Internal server error", code: "INTERNAL_ERROR" });
+  logger.error(
+    {
+      event: "application_error",
+      requestId: req.id,
+      method: req.method,
+      path: req.path,
+      err: error
+    },
+    "Unhandled request error"
+  );
+  return res.status(500).json({
+    message: "Internal server error",
+    code: "INTERNAL_ERROR",
+    requestId: req.id
+  });
 });
 
 module.exports = app;
