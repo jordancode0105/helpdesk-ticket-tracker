@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: it-help-desk-api
+    runtime: docker
+    dockerfilePath: ./server/Dockerfile
+    dockerContext: ./server
+    healthCheckPath: /health/ready
+    maxShutdownDelaySeconds: 15
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: JWT_SECRET
+        generateValue: true
+      - key: MONGO_URI
+        sync: false
+      - key: CLIENT_URL
+        sync: false
+      - key: CLIENT_URLS
+        sync: false

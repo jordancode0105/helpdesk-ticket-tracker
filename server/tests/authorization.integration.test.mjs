@@ -17,6 +17,7 @@ const Ticket = require("../models/Ticket");
 const User = require("../models/User");
 
 let mongoServer;
+let testMongoUri;
 let app;
 let api;
 
@@ -55,7 +56,7 @@ beforeAll(async () => {
     instance: { dbName: "helpdesk-integration" }
   });
 
-  const testMongoUri = mongoServer.getUri();
+  testMongoUri = mongoServer.getUri();
 
   if (!testMongoUri.startsWith("mongodb://127.0.0.1:")) {
     throw new Error("Integration tests refused a non-local MongoDB URI");
@@ -81,6 +82,61 @@ afterAll(async () => {
   if (mongoServer) {
     await mongoServer.stop();
   }
+});
+
+describe("health checks and request context", () => {
+  test("liveness reports the application process without infrastructure details", async () => {
+    const response = await api.get("/health/live");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ status: "ok" });
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(response.headers["x-request-id"]).toEqual(expect.any(String));
+  });
+
+  test("readiness reports a healthy MongoDB connection", async () => {
+    const response = await api.get("/health/ready");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      status: "ready",
+      checks: { mongodb: "up" }
+    });
+  });
+
+  test("readiness fails while liveness remains healthy when MongoDB is disconnected", async () => {
+    await mongoose.disconnect();
+
+    try {
+      const readinessResponse = await api.get("/health/ready");
+      const livenessResponse = await api.get("/health/live");
+
+      expect(readinessResponse.status).toBe(503);
+      expect(readinessResponse.body).toEqual({
+        status: "not_ready",
+        checks: { mongodb: "down" }
+      });
+      expect(livenessResponse.status).toBe(200);
+    } finally {
+      await mongoose.connect(testMongoUri, { dbName: "helpdesk-integration" });
+      await Ticket.syncIndexes();
+    }
+  });
+
+  test("safe request IDs propagate and unsafe values are replaced", async () => {
+    const propagated = await api
+      .get("/health/live")
+      .set("X-Request-ID", "review-session_123:phase-6");
+    const replaced = await api
+      .get("/health/live")
+      .set("X-Request-ID", "unsafe request id with spaces");
+
+    expect(propagated.headers["x-request-id"]).toBe("review-session_123:phase-6");
+    expect(replaced.headers["x-request-id"]).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    );
+    expect(replaced.headers["x-request-id"]).not.toBe("unsafe request id with spaces");
+  });
 });
 
 describe("authentication and simulator signup", () => {

@@ -55,6 +55,8 @@ I built this project to practice and demonstrate full-stack application developm
 - Explicit server-enforced status transitions for technicians and admins
 - Strict server-side validation and role enforcement
 - HTTP security headers, request-size limits, and authentication rate limiting
+- Liveness/readiness health checks and structured request logs with correlation IDs
+- Reproducible Docker Compose stack with persistent local MongoDB
 - Responsive, portfolio-friendly UI
 
 ## Activity History and Workflow Rules
@@ -188,6 +190,8 @@ This design avoids unbounded list responses and provides intentional query paths
 
 ```txt
 client/
+  Dockerfile
+  nginx.conf
   index.html
   package.json
   vite.config.js
@@ -198,6 +202,7 @@ client/
     pages/
     styles/
 server/
+  Dockerfile
   config/
   domain/
   middleware/
@@ -212,6 +217,7 @@ Create `server/.env`:
 
 ```env
 NODE_ENV=development
+LOG_LEVEL=info
 PORT=9000
 MONGO_URI=your_mongodb_connection_string
 JWT_SECRET=replace_this_with_a_long_random_secret
@@ -234,6 +240,7 @@ Backend production variables:
 ```txt
 MONGO_URI=your_mongodb_atlas_production_connection_string
 JWT_SECRET=a_long_random_production_secret
+LOG_LEVEL=info
 CLIENT_URL=https://your-vercel-app.vercel.app
 CLIENT_URLS=https://your-vercel-app.vercel.app
 ```
@@ -310,9 +317,78 @@ Open:
 http://127.0.0.1:5173
 ```
 
+## Docker Local Stack
+
+The repository includes a one-command local stack for reviewers who have Docker Desktop or another Docker Engine with Compose v2. The backend image uses Node.js 22, installs locked production dependencies with `npm ci --omit=dev`, and runs as the non-root `node` user. The frontend uses a multi-stage build because Vite compilation and static serving are genuinely separate concerns: Node builds the assets and an unprivileged Nginx process serves the SPA. Production frontend hosting remains Vercel; the frontend container exists for reproducible local review.
+
+Create the ignored local Compose environment file:
+
+```bash
+cp .env.compose.example .env.compose
+```
+
+Windows PowerShell:
+
+```powershell
+Copy-Item .env.compose.example .env.compose
+```
+
+The example secret is intentionally local and public. Replace it before using the stack on a shared machine, and never reuse it in a deployed environment.
+
+Build and start the complete stack:
+
+```bash
+docker compose --env-file .env.compose up --build
+```
+
+Local endpoints:
+
+```txt
+Frontend:        http://127.0.0.1:5173
+Backend API:     http://127.0.0.1:9000
+MongoDB:         mongodb://127.0.0.1:27017/helpdesk_tracker
+API liveness:    http://127.0.0.1:9000/health/live
+API readiness:   http://127.0.0.1:9000/health/ready
+```
+
+Compose waits for MongoDB to become healthy before starting the API and waits for API readiness before starting the frontend. The `mongo-data` named volume preserves local database records across normal stops and container recreation.
+
+Useful commands:
+
+```bash
+docker compose --env-file .env.compose logs -f api
+docker compose --env-file .env.compose down
+```
+
+`docker compose down` preserves the database volume. Running `docker compose down --volumes` deliberately deletes the local MongoDB data.
+
+## Runtime Health and Observability
+
+`GET /health/live` returns `200 {"status":"ok"}` whenever the Express process can serve requests. It deliberately does not depend on MongoDB, making it suitable for process/container liveness.
+
+`GET /health/ready` checks both Mongoose's connected state and a bounded MongoDB ping. It returns `200` with `{"status":"ready","checks":{"mongodb":"up"}}` when traffic can be served, or `503` with `{"status":"not_ready","checks":{"mongodb":"down"}}` when the database is unavailable. Health responses use `Cache-Control: no-store` and expose no connection strings or database host details.
+
+Every response includes `X-Request-ID`. Safe caller-provided IDs containing 1–100 letters, numbers, `.`, `_`, `:`, or `-` are propagated; unsafe values are replaced with a UUID. Each completed request emits a Pino JSON log containing the request ID, method, path without query parameters, response status, and duration. Request bodies, passwords, JWTs, authorization headers, and user emails are not part of request logs. Unexpected application errors use a distinct structured error event and return the request ID with the generic 500 response.
+
+Production logs are written to standard output/error for Render or another container runtime to collect. `LOG_LEVEL` supports `trace`, `debug`, `info`, `warn`, `error`, `fatal`, and `silent`.
+
+SIGTERM and SIGINT initiate bounded graceful shutdown: the HTTP listener stops accepting new connections, active requests are allowed to finish, Mongoose disconnects, and the process exits cleanly. A 10-second application timeout prevents indefinite shutdown; the Render Blueprint allows 15 seconds before platform termination.
+
+## Architecture and Deployment
+
+Local Compose traffic flows from the browser to the unprivileged Nginx frontend, then to the Node API, which connects to the private `mongo` service and its persistent volume. Only localhost ports are published.
+
+Production remains intentionally split by hosting responsibility:
+
+```txt
+Browser -> Vercel static frontend -> Render Docker API -> MongoDB Atlas
+```
+
+The root `render.yaml` describes the Docker build context, Dockerfile, readiness path, shutdown allowance, generated JWT secret, and required dashboard-supplied values. Adopting the Blueprint is a manual Render Dashboard action; committing the file does not modify the existing service by itself.
+
 ## Automated Backend Tests
 
-The backend integration suite contains 114 tests using Vitest, Supertest, and an automatically managed in-memory MongoDB instance. It creates its own test users and tickets, clears the ephemeral database between tests, and never uses seeded, development, or production data.
+The backend integration suite contains 118 tests using Vitest, Supertest, and an automatically managed in-memory MongoDB instance. It creates its own test users and tickets, clears the ephemeral database between tests, and never uses seeded, development, or production data.
 
 Run the complete suite:
 
@@ -333,7 +409,7 @@ Generate the V8 coverage report:
 npm run test:coverage
 ```
 
-The suite covers persona signup, JWT rejection cases, role-scoped ticket visibility, requester/technician/admin permissions, both assignment paths, database non-mutation on rejected requests, API boundary validation, the complete technician transition matrix, representative admin transitions, activity authorization, event contents and ordering, pagination boundaries, deterministic sorting, role-safe search, composable filters, list/detail response separation, and the declared query indexes.
+The suite covers persona signup, JWT rejection cases, role-scoped ticket visibility, requester/technician/admin permissions, both assignment paths, database non-mutation on rejected requests, API boundary validation, the complete technician transition matrix, representative admin transitions, activity authorization, event contents and ordering, pagination boundaries, deterministic sorting, role-safe search, composable filters, list/detail response separation, declared query indexes, health behavior, and request-ID propagation/sanitization.
 
 Coverage regression protection currently requires at least 80% statements, 70% branches, 80% functions, and 80% lines. These thresholds are deliberately below the current coverage so they catch substantial regressions without encouraging tests written only to preserve an arbitrary percentage.
 
@@ -354,6 +430,11 @@ The frontend job independently uses Node.js 22.19.0 to:
 - install locked dependencies with `npm ci`
 - create the production Vite build
 - fail on high or critical npm dependency advisories
+
+The container job independently:
+
+- validates the Compose configuration with the committed example environment
+- builds the backend and frontend images without publishing them
 
 Run the principal checks locally from the repository root:
 
@@ -377,22 +458,14 @@ The Render backend may spin down when inactive, so the first live demo request c
 
 ### Render Backend
 
-Recommended Render settings:
+The repository-defined `render.yaml` configures a Docker web service built from `server/Dockerfile`, uses `/health/ready` for deploy/runtime checks, and gives the application 15 seconds to handle Render's SIGTERM. To adopt it, create or connect a Render Blueprint from the repository. Do not attach the same service to multiple Blueprints.
 
-```txt
-Service type: Web Service
-Root directory: server
-Build command: npm install
-Start command: npm start
-```
-
-Set these environment variables in Render:
+The Blueprint generates `JWT_SECRET`. These values remain dashboard-managed and must be supplied during initial Blueprint setup or maintained on the existing service:
 
 ```txt
 MONGO_URI=your_mongodb_atlas_connection_string
-JWT_SECRET=a_long_random_production_secret
 CLIENT_URL=https://your-vercel-app.vercel.app
-CLIENT_URLS=https://your-vercel-app.vercel.app
+CLIENT_URLS=https://your-vercel-app.vercel.app,https://your-preview-domain.vercel.app
 ```
 
 Render provides a `PORT` value for web services, so the backend reads `process.env.PORT` automatically.
@@ -426,8 +499,10 @@ After Vercel deploys, copy the frontend URL and add it to the backend `CLIENT_UR
 
 Official docs:
 
-- [Render Express deployment](https://render.com/docs/deploy-node-express-app)
-- [Render environment variables](https://render.com/docs/environment-variables)
+- [Render Docker deployment](https://render.com/docs/docker)
+- [Render Blueprint specification](https://render.com/docs/blueprint-spec)
+- [Render environment variables](https://render.com/docs/configure-environment-variables)
+- [Render health checks](https://render.com/docs/health-checks)
 - [Vercel Vite deployment](https://vercel.com/docs/frameworks/frontend/vite)
 - [Vercel environment variables](https://vercel.com/docs/environment-variables)
 
@@ -491,6 +566,13 @@ The seed script hashes demo passwords with `bcryptjs`, upserts the demo users, r
 14. Open the ticket detail page and confirm the activity timeline identifies each actor and change.
 
 ## API Routes
+
+Health:
+
+```txt
+GET /health/live
+GET /health/ready
+```
 
 Auth:
 
