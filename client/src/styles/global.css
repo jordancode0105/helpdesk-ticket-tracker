@@ -154,7 +154,15 @@ textarea {
 }
 
 .filter-bar {
+  display: grid;
+  gap: 14px;
   padding: 16px;
+}
+
+.filter-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .filter-bar label {
@@ -162,7 +170,14 @@ textarea {
   display: grid;
   font-weight: 800;
   gap: 8px;
-  max-width: 260px;
+}
+
+.filter-grid .search-field {
+  grid-column: span 2;
+}
+
+.filter-reset {
+  justify-self: start;
 }
 
 .button {
@@ -196,6 +211,19 @@ textarea {
 .ticket-list {
   display: grid;
   gap: 14px;
+}
+
+.pagination {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+}
+
+.pagination span {
+  color: #52617a;
+  font-weight: 700;
+  text-align: center;
 }
 
 .ticket-card,
@@ -528,11 +556,17 @@ textarea:focus {
   .form-grid,
   .detail-grid,
   .dashboard-grid,
+  .filter-grid,
   .workflow-form {
     grid-template-columns: 1fr;
   }
 
-  .filter-bar label {
-    max-width: none;
+  .filter-grid .search-field {
+    grid-column: span 1;
+  }
+
+  .pagination {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

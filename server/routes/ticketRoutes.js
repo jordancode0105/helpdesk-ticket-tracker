@@ -1,4 +1,5 @@
 const express = require("express");
+const mongoose = require("mongoose");
 const Ticket = require("../models/Ticket");
 const User = require("../models/User");
 const { ACTIVITY_TYPES, appendTicketActivity } = require("../domain/ticketActivity");
@@ -11,6 +12,7 @@ const {
   createTicketSchema,
   ticketIdSchema,
   ticketActivityResponseSchema,
+  ticketListResponseSchema,
   ticketListSchema,
   updateTicketSchema
 } = require("../validation/requestSchemas");
@@ -27,7 +29,6 @@ function formatUser(user) {
   return {
     id: user._id.toString(),
     name: user.name,
-    email: user.email,
     role: user.role
   };
 }
@@ -148,31 +149,171 @@ function canViewTicket(ticket, user) {
   return false;
 }
 
-function buildTicketQuery(req) {
-  const query = {};
+function buildTicketMatch(req) {
+  const match = {};
 
   if (req.user.role === "requester") {
-    query.createdBy = req.user._id;
+    match.createdBy = req.user._id;
   }
 
   if (req.user.role === "technician") {
-    query.assignedTo = req.user._id;
+    match.assignedTo = req.user._id;
   }
 
-  const { priority } = req.validated.query;
+  const { assignedTo, category, priority, search, status } = req.validated.query;
 
-  if (priority && priority !== "All") {
-    query.priority = priority;
+  if (status) {
+    match.status = status;
   }
 
-  return query;
+  if (priority) {
+    match.priority = priority;
+  }
+
+  if (category) {
+    match.category = category;
+  }
+
+  if (assignedTo) {
+    match.assignedTo =
+      assignedTo === "unassigned" ? null : new mongoose.Types.ObjectId(assignedTo);
+  }
+
+  if (search) {
+    if (/^[a-f\d]{24}$/i.test(search)) {
+      match._id = new mongoose.Types.ObjectId(search);
+    } else {
+      match.$text = { $search: search };
+    }
+  }
+
+  return match;
+}
+
+function buildTicketSortStages(sort) {
+  if (sort === "priority-high" || sort === "priority-low") {
+    const direction = sort === "priority-high" ? -1 : 1;
+
+    return [
+      {
+        $addFields: {
+          _priorityOrder: {
+            $indexOfArray: [["Low", "Medium", "High", "Critical"], "$priority"]
+          }
+        }
+      },
+      { $sort: { _priorityOrder: direction, createdAt: -1, _id: -1 } }
+    ];
+  }
+
+  return [];
+}
+
+function buildTicketSort(sort) {
+  if (sort === "oldest") {
+    return { createdAt: 1, _id: 1 };
+  }
+
+  return { createdAt: -1, _id: -1 };
+}
+
+function formatSummaryUser(user) {
+  if (!user) {
+    return null;
+  }
+
+  return {
+    id: user._id.toString(),
+    name: user.name,
+    role: user.role
+  };
+}
+
+async function formatTicketSummaries(tickets) {
+  const userIds = [
+    ...new Set(
+      tickets
+        .flatMap((ticket) => [ticket.createdBy, ticket.assignedTo])
+        .filter(Boolean)
+        .map((userId) => userId.toString())
+    )
+  ];
+  const users = userIds.length
+    ? await User.find({ _id: { $in: userIds } }).select("name role").lean()
+    : [];
+  const usersById = new Map(users.map((user) => [user._id.toString(), user]));
+
+  return tickets.map((ticket) => {
+    const descriptionCharacters = [...ticket.description];
+
+    return {
+      id: ticket._id.toString(),
+      title: ticket.title,
+      descriptionPreview: descriptionCharacters.slice(0, 160).join(""),
+      descriptionTruncated: descriptionCharacters.length > 160,
+      category: ticket.category,
+      status: ticket.status,
+      priority: ticket.priority,
+      createdBy: formatSummaryUser(usersById.get(ticket.createdBy.toString())),
+      assignedTo: ticket.assignedTo
+        ? formatSummaryUser(usersById.get(ticket.assignedTo.toString()))
+        : null,
+      createdAt: ticket.createdAt.toISOString(),
+      updatedAt: ticket.updatedAt.toISOString()
+    };
+  });
+}
+
+function formatTicketStats(statusCounts, total) {
+  const counts = new Map(statusCounts.map((entry) => [entry._id, entry.count]));
+
+  return {
+    total,
+    open: counts.get("Open") || 0,
+    inProgress: counts.get("In Progress") || 0,
+    resolved: counts.get("Resolved") || 0,
+    closed: counts.get("Closed") || 0
+  };
+}
+
+function fetchTicketPage(match, { limit, page, sort }) {
+  const skip = (page - 1) * limit;
+  const selectedFields = {
+    title: 1,
+    description: 1,
+    category: 1,
+    status: 1,
+    priority: 1,
+    createdBy: 1,
+    assignedTo: 1,
+    createdAt: 1,
+    updatedAt: 1
+  };
+
+  if (sort === "priority-high" || sort === "priority-low") {
+    return Ticket.aggregate([
+      { $match: match },
+      ...buildTicketSortStages(sort),
+      { $skip: skip },
+      { $limit: limit },
+      { $project: selectedFields }
+    ]).option({ maxTimeMS: 5000 });
+  }
+
+  return Ticket.find(match)
+    .select(selectedFields)
+    .sort(buildTicketSort(sort))
+    .skip(skip)
+    .limit(limit)
+    .maxTimeMS(5000)
+    .lean();
 }
 
 function populateTicketQuery(query) {
   return query
-    .populate("createdBy", "name email role")
-    .populate("assignedTo", "name email role")
-    .populate("comments.user", "name email role");
+    .populate("createdBy", "name role")
+    .populate("assignedTo", "name role")
+    .populate("comments.user", "name role");
 }
 
 function populateActivityQuery(query) {
@@ -187,12 +328,36 @@ function ticketWithActivityById(id) {
 }
 
 router.get("/", validateRequest(ticketListSchema), async (req, res) => {
-  try {
-    const tickets = await populateTicketQuery(Ticket.find(buildTicketQuery(req))).sort({
-      createdAt: -1
-    });
+  if (req.validated.query.assignedTo && req.user.role !== "admin") {
+    return res.status(403).json({ message: "Only admins can filter by assigned technician" });
+  }
 
-    res.json(tickets.map(formatTicket));
+  try {
+    const { limit, page, sort } = req.validated.query;
+    const match = buildTicketMatch(req);
+    const [tickets, totalItems, statusCounts] = await Promise.all([
+      fetchTicketPage(match, { limit, page, sort }),
+      Ticket.countDocuments(match).maxTimeMS(5000),
+      Ticket.aggregate([
+        { $match: match },
+        { $group: { _id: "$status", count: { $sum: 1 } } }
+      ]).option({ maxTimeMS: 5000 })
+    ]);
+    const totalPages = Math.ceil(totalItems / limit);
+    const response = {
+      tickets: await formatTicketSummaries(tickets),
+      pagination: {
+        page,
+        limit,
+        totalItems,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1
+      },
+      stats: formatTicketStats(statusCounts, totalItems)
+    };
+
+    res.json(ticketListResponseSchema.parse(response));
   } catch (error) {
     res.status(500).json({ message: "Unable to get tickets" });
   }

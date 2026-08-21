@@ -38,17 +38,27 @@ export async function createTicket({
   assignedTo = null,
   status = "Open",
   priority = "Medium",
-  title
+  title,
+  description = "A sufficiently detailed integration test ticket description.",
+  category = "Software",
+  createdAt
 }) {
   fixtureSequence += 1;
 
-  return Ticket.create({
+  const ticketData = {
     title: title || `Integration ticket ${fixtureSequence}`,
-    description: "A sufficiently detailed integration test ticket description.",
-    category: "Software",
+    description,
+    category,
     status,
     priority,
     createdBy,
     assignedTo
-  });
+  };
+
+  if (createdAt) {
+    ticketData.createdAt = createdAt;
+    ticketData.updatedAt = createdAt;
+  }
+
+  return Ticket.create(ticketData);
 }

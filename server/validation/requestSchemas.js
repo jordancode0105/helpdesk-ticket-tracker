@@ -4,6 +4,7 @@ const roles = ["requester", "technician", "admin"];
 const categories = ["Hardware", "Software", "Network", "Account Access", "Email", "Other"];
 const statuses = ["Open", "In Progress", "Resolved", "Closed"];
 const priorities = ["Low", "Medium", "High", "Critical"];
+const ticketSorts = ["newest", "oldest", "priority-high", "priority-low"];
 
 const emptyObject = z.object({}).strict();
 const objectId = z.string().regex(/^[a-f\d]{24}$/i, "Must be a valid ObjectId");
@@ -37,7 +38,32 @@ const emptyRequestSchema = requestSchema({});
 const ticketListSchema = requestSchema({
   query: z
     .object({
-      priority: z.enum(["All", ...priorities]).optional()
+      page: z.coerce.number().int().min(1).max(10000).default(1),
+      limit: z.coerce.number().int().min(1).max(50).default(10),
+      search: z
+        .string()
+        .trim()
+        .min(2)
+        .max(80)
+        .transform((value) => value.replace(/\s+/g, " "))
+        .optional(),
+      status: z
+        .enum(["All", ...statuses])
+        .optional()
+        .transform((value) => (value === "All" ? undefined : value)),
+      priority: z
+        .enum(["All", ...priorities])
+        .optional()
+        .transform((value) => (value === "All" ? undefined : value)),
+      category: z
+        .enum(["All", ...categories])
+        .optional()
+        .transform((value) => (value === "All" ? undefined : value)),
+      assignedTo: z
+        .union([objectId, z.literal("unassigned"), z.literal("All")])
+        .optional()
+        .transform((value) => (value === "All" ? undefined : value)),
+      sort: z.enum(ticketSorts).default("newest")
     })
     .strict()
 });
@@ -137,6 +163,55 @@ const ticketActivityResponseSchema = z
   })
   .strict();
 
+const ticketSummaryUserResponseSchema = z
+  .object({
+    id: objectId,
+    name: z.string().min(1).max(80),
+    role: z.enum(roles)
+  })
+  .strict();
+
+const ticketListResponseSchema = z
+  .object({
+    tickets: z.array(
+      z
+        .object({
+          id: objectId,
+          title: z.string().min(1).max(120),
+          descriptionPreview: z.string().max(320),
+          descriptionTruncated: z.boolean(),
+          category: z.enum(categories),
+          status: z.enum(statuses),
+          priority: z.enum(priorities),
+          createdBy: ticketSummaryUserResponseSchema.nullable(),
+          assignedTo: ticketSummaryUserResponseSchema.nullable(),
+          createdAt: z.string().datetime(),
+          updatedAt: z.string().datetime()
+        })
+        .strict()
+    ),
+    pagination: z
+      .object({
+        page: z.number().int().positive(),
+        limit: z.number().int().min(1).max(50),
+        totalItems: z.number().int().nonnegative(),
+        totalPages: z.number().int().nonnegative(),
+        hasNextPage: z.boolean(),
+        hasPreviousPage: z.boolean()
+      })
+      .strict(),
+    stats: z
+      .object({
+        total: z.number().int().nonnegative(),
+        open: z.number().int().nonnegative(),
+        inProgress: z.number().int().nonnegative(),
+        resolved: z.number().int().nonnegative(),
+        closed: z.number().int().nonnegative()
+      })
+      .strict()
+  })
+  .strict();
+
 module.exports = {
   addCommentSchema,
   assignTicketSchema,
@@ -146,6 +221,7 @@ module.exports = {
   signupSchema,
   ticketIdSchema,
   ticketActivityResponseSchema,
+  ticketListResponseSchema,
   ticketListSchema,
   updateTicketSchema
 };

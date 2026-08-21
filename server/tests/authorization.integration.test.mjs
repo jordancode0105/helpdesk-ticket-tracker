@@ -28,6 +28,16 @@ async function storedTicketWithActivity(ticketId) {
   return Ticket.findById(ticketId).select("+activities +activitySequence");
 }
 
+async function createManyTickets(count, buildOptions) {
+  const tickets = [];
+
+  for (let index = 0; index < count; index += 1) {
+    tickets.push(await createTicket(buildOptions(index)));
+  }
+
+  return tickets;
+}
+
 function signTestToken(userId, overrides = {}) {
   const secret = overrides.secret || environment.JWT_SECRET;
   const options = {
@@ -52,6 +62,7 @@ beforeAll(async () => {
   }
 
   await mongoose.connect(testMongoUri, { dbName: "helpdesk-integration" });
+  await Ticket.syncIndexes();
   app = require("../app");
   api = request(app);
 });
@@ -232,7 +243,9 @@ describe("requester authorization", () => {
     const response = await api.get("/api/tickets").set(authorization(requester));
 
     expect(response.status).toBe(200);
-    expect(response.body.map((ticket) => ticket.id)).toEqual([ownTicket._id.toString()]);
+    expect(response.body.tickets.map((ticket) => ticket.id)).toEqual([
+      ownTicket._id.toString()
+    ]);
   });
 
   test("a requester retrieves their own ticket but not another requester's", async () => {
@@ -363,7 +376,9 @@ describe("technician authorization", () => {
     const response = await api.get("/api/tickets").set(authorization(technician));
 
     expect(response.status).toBe(200);
-    expect(response.body.map((ticket) => ticket.id)).toEqual([assignedTicket._id.toString()]);
+    expect(response.body.tickets.map((ticket) => ticket.id)).toEqual([
+      assignedTicket._id.toString()
+    ]);
   });
 
   test("a technician retrieves only assigned tickets", async () => {
@@ -518,7 +533,7 @@ describe("admin authorization", () => {
     const detailResponse = await api.get(`/api/tickets/${first._id}`).set(authorization(admin));
 
     expect(listResponse.status).toBe(200);
-    expect(new Set(listResponse.body.map((ticket) => ticket.id))).toEqual(
+    expect(new Set(listResponse.body.tickets.map((ticket) => ticket.id))).toEqual(
       new Set([first._id.toString(), second._id.toString()])
     );
     expect(detailResponse.status).toBe(200);
@@ -1186,5 +1201,489 @@ describe("ticket activity history and explicit workflow transitions", () => {
 
     expect(response.status).toBe(200);
     expect(storedTicket.activities).toHaveLength(0);
+  });
+});
+
+describe("scalable ticket list queries", () => {
+  test("default pagination returns ten tickets and complete metadata", async () => {
+    const admin = await createPersona("admin");
+    const requester = await createPersona("requester");
+    await createManyTickets(12, (index) => ({
+      createdBy: requester.user._id,
+      title: `Default pagination ticket ${index}`
+    }));
+
+    const response = await api.get("/api/tickets").set(authorization(admin));
+
+    expect(response.status).toBe(200);
+    expect(response.body.tickets).toHaveLength(10);
+    expect(response.body.pagination).toEqual({
+      page: 1,
+      limit: 10,
+      totalItems: 12,
+      totalPages: 2,
+      hasNextPage: true,
+      hasPreviousPage: false
+    });
+    expect(response.body.stats).toEqual({
+      total: 12,
+      open: 12,
+      inProgress: 0,
+      resolved: 0,
+      closed: 0
+    });
+  });
+
+  test("custom page sizes and page boundaries return the expected slices", async () => {
+    const admin = await createPersona("admin");
+    const requester = await createPersona("requester");
+    await createManyTickets(11, (index) => ({
+      createdBy: requester.user._id,
+      title: `Boundary pagination ticket ${index}`
+    }));
+
+    const thirdPage = await api
+      .get("/api/tickets?page=3&limit=5")
+      .set(authorization(admin));
+    const emptyPage = await api
+      .get("/api/tickets?page=4&limit=5")
+      .set(authorization(admin));
+
+    expect(thirdPage.status).toBe(200);
+    expect(thirdPage.body.tickets).toHaveLength(1);
+    expect(thirdPage.body.pagination).toMatchObject({
+      page: 3,
+      limit: 5,
+      totalItems: 11,
+      totalPages: 3,
+      hasNextPage: false,
+      hasPreviousPage: true
+    });
+    expect(emptyPage.status).toBe(200);
+    expect(emptyPage.body.tickets).toHaveLength(0);
+    expect(emptyPage.body.pagination.totalPages).toBe(3);
+  });
+
+  test("the maximum page size is accepted and larger values are rejected", async () => {
+    const admin = await createPersona("admin");
+    const requester = await createPersona("requester");
+    await createManyTickets(52, (index) => ({
+      createdBy: requester.user._id,
+      title: `Maximum pagination ticket ${index}`
+    }));
+
+    const maximumResponse = await api
+      .get("/api/tickets?limit=50")
+      .set(authorization(admin));
+    const excessiveResponse = await api
+      .get("/api/tickets?limit=51")
+      .set(authorization(admin));
+
+    expect(maximumResponse.status).toBe(200);
+    expect(maximumResponse.body.tickets).toHaveLength(50);
+    expect(excessiveResponse.status).toBe(400);
+    expect(excessiveResponse.body.code).toBe("VALIDATION_ERROR");
+  });
+
+  test.each([
+    "page=0",
+    "page=-1",
+    "page=1.5",
+    "page=not-a-number",
+    "page=10001",
+    "limit=0",
+    "limit=1.5"
+  ])("invalid pagination parameter %s is rejected", async (query) => {
+    const admin = await createPersona("admin");
+    const response = await api.get(`/api/tickets?${query}`).set(authorization(admin));
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe("VALIDATION_ERROR");
+  });
+
+  test("newest and oldest sorts use the ticket id as a deterministic tie-breaker", async () => {
+    const admin = await createPersona("admin");
+    const requester = await createPersona("requester");
+    const tickets = await createManyTickets(4, (index) => ({
+      createdBy: requester.user._id,
+      title: `Stable ordering ticket ${index}`
+    }));
+    const sameTimestamp = new Date("2026-01-01T12:00:00.000Z");
+    await Ticket.collection.updateMany({}, { $set: { createdAt: sameTimestamp } });
+    const ascendingIds = tickets.map((ticket) => ticket._id.toString()).sort();
+
+    const newest = await api
+      .get("/api/tickets?sort=newest")
+      .set(authorization(admin));
+    const oldest = await api
+      .get("/api/tickets?sort=oldest")
+      .set(authorization(admin));
+
+    expect(newest.body.tickets.map((ticket) => ticket.id)).toEqual(
+      [...ascendingIds].reverse()
+    );
+    expect(oldest.body.tickets.map((ticket) => ticket.id)).toEqual(ascendingIds);
+  });
+
+  test("requester pagination never includes another requester's tickets", async () => {
+    const requester = await createPersona("requester");
+    const otherRequester = await createPersona("requester");
+    await createManyTickets(7, (index) => ({
+      createdBy: requester.user._id,
+      title: `Requester own paginated ticket ${index}`
+    }));
+    await createManyTickets(8, (index) => ({
+      createdBy: otherRequester.user._id,
+      title: `Requester hidden paginated ticket ${index}`
+    }));
+
+    const response = await api
+      .get("/api/tickets?page=2&limit=5")
+      .set(authorization(requester));
+
+    expect(response.body.pagination.totalItems).toBe(7);
+    expect(response.body.tickets).toHaveLength(2);
+    expect(
+      response.body.tickets.every(
+        (ticket) => ticket.createdBy.id === requester.user._id.toString()
+      )
+    ).toBe(true);
+  });
+
+  test("technician pagination includes only tickets assigned to that technician", async () => {
+    const requester = await createPersona("requester");
+    const technician = await createPersona("technician");
+    const otherTechnician = await createPersona("technician");
+    await createManyTickets(6, (index) => ({
+      createdBy: requester.user._id,
+      assignedTo: technician.user._id,
+      title: `Technician assigned paginated ticket ${index}`
+    }));
+    await createManyTickets(4, (index) => ({
+      createdBy: requester.user._id,
+      assignedTo: otherTechnician.user._id,
+      title: `Technician hidden paginated ticket ${index}`
+    }));
+    await createTicket({ createdBy: requester.user._id, title: "Unassigned hidden ticket" });
+
+    const response = await api
+      .get("/api/tickets?page=2&limit=4")
+      .set(authorization(technician));
+
+    expect(response.body.pagination.totalItems).toBe(6);
+    expect(response.body.tickets).toHaveLength(2);
+    expect(
+      response.body.tickets.every(
+        (ticket) => ticket.assignedTo.id === technician.user._id.toString()
+      )
+    ).toBe(true);
+  });
+
+  test("admin pagination counts tickets across all requesters and assignments", async () => {
+    const admin = await createPersona("admin");
+    const firstRequester = await createPersona("requester");
+    const secondRequester = await createPersona("requester");
+    await createManyTickets(4, (index) => ({
+      createdBy: firstRequester.user._id,
+      title: `First admin-visible ticket ${index}`
+    }));
+    await createManyTickets(5, (index) => ({
+      createdBy: secondRequester.user._id,
+      title: `Second admin-visible ticket ${index}`
+    }));
+
+    const response = await api
+      .get("/api/tickets?page=2&limit=5")
+      .set(authorization(admin));
+
+    expect(response.body.pagination.totalItems).toBe(9);
+    expect(response.body.tickets).toHaveLength(4);
+  });
+
+  test("search matches title and description terms while omitting nonmatches", async () => {
+    const admin = await createPersona("admin");
+    const requester = await createPersona("requester");
+    const titleMatch = await createTicket({
+      createdBy: requester.user._id,
+      title: "Quasarprinter connection failure"
+    });
+    const descriptionMatch = await createTicket({
+      createdBy: requester.user._id,
+      title: "Remote network investigation",
+      description: "The nebularouter diagnostic is failing for this workstation."
+    });
+    await createTicket({
+      createdBy: requester.user._id,
+      title: "Ordinary password reset request"
+    });
+
+    const titleResponse = await api
+      .get("/api/tickets?search=quasarprinter")
+      .set(authorization(admin));
+    const descriptionResponse = await api
+      .get("/api/tickets?search=nebularouter")
+      .set(authorization(admin));
+
+    expect(titleResponse.body.tickets.map((ticket) => ticket.id)).toEqual([
+      titleMatch._id.toString()
+    ]);
+    expect(descriptionResponse.body.tickets.map((ticket) => ticket.id)).toEqual([
+      descriptionMatch._id.toString()
+    ]);
+  });
+
+  test("a ticket id can be searched exactly", async () => {
+    const admin = await createPersona("admin");
+    const requester = await createPersona("requester");
+    const target = await createTicket({ createdBy: requester.user._id });
+    await createTicket({ createdBy: requester.user._id });
+
+    const response = await api
+      .get(`/api/tickets?search=${target._id}`)
+      .set(authorization(admin));
+
+    expect(response.body.tickets.map((ticket) => ticket.id)).toEqual([
+      target._id.toString()
+    ]);
+  });
+
+  test("search remains constrained by requester visibility", async () => {
+    const requester = await createPersona("requester");
+    const otherRequester = await createPersona("requester");
+    const ownTicket = await createTicket({
+      createdBy: requester.user._id,
+      title: "Orbitalsearch requester ticket"
+    });
+    await createTicket({
+      createdBy: otherRequester.user._id,
+      title: "Orbitalsearch hidden ticket"
+    });
+
+    const response = await api
+      .get("/api/tickets?search=orbitalsearch")
+      .set(authorization(requester));
+
+    expect(response.body.pagination.totalItems).toBe(1);
+    expect(response.body.tickets[0].id).toBe(ownTicket._id.toString());
+  });
+
+  test.each(["a", "x".repeat(81)])(
+    "malformed or oversized search input is rejected",
+    async (search) => {
+      const admin = await createPersona("admin");
+      const response = await api
+        .get(`/api/tickets?search=${search}`)
+        .set(authorization(admin));
+
+      expect(response.status).toBe(400);
+      expect(response.body.code).toBe("VALIDATION_ERROR");
+    }
+  );
+
+  test.each([
+    ["status", "Resolved", { status: "Resolved" }],
+    ["priority", "Critical", { priority: "Critical" }],
+    ["category", "Network", { category: "Network" }]
+  ])("the %s filter returns only matching tickets", async (field, value, options) => {
+    const admin = await createPersona("admin");
+    const requester = await createPersona("requester");
+    const matching = await createTicket({
+      createdBy: requester.user._id,
+      title: `Matching ${field} filter ticket`,
+      ...options
+    });
+    await createTicket({
+      createdBy: requester.user._id,
+      title: `Nonmatching ${field} filter ticket`
+    });
+
+    const response = await api
+      .get(`/api/tickets?${field}=${encodeURIComponent(value)}`)
+      .set(authorization(admin));
+
+    expect(response.body.tickets.map((ticket) => ticket.id)).toEqual([
+      matching._id.toString()
+    ]);
+  });
+
+  test("combined filters compose with search and requester authorization", async () => {
+    const requester = await createPersona("requester");
+    const otherRequester = await createPersona("requester");
+    const matching = await createTicket({
+      createdBy: requester.user._id,
+      title: "Quantumfilter network outage",
+      status: "In Progress",
+      priority: "High",
+      category: "Network"
+    });
+    await createTicket({
+      createdBy: requester.user._id,
+      title: "Quantumfilter wrong category",
+      status: "In Progress",
+      priority: "High",
+      category: "Software"
+    });
+    await createTicket({
+      createdBy: otherRequester.user._id,
+      title: "Quantumfilter hidden matching ticket",
+      status: "In Progress",
+      priority: "High",
+      category: "Network"
+    });
+
+    const response = await api
+      .get(
+        "/api/tickets?search=quantumfilter&status=In%20Progress&priority=High&category=Network"
+      )
+      .set(authorization(requester));
+
+    expect(response.body.pagination.totalItems).toBe(1);
+    expect(response.body.tickets[0].id).toBe(matching._id.toString());
+    expect(response.body.stats.inProgress).toBe(1);
+  });
+
+  test("admins can filter by technician or unassigned state", async () => {
+    const admin = await createPersona("admin");
+    const requester = await createPersona("requester");
+    const technician = await createPersona("technician");
+    const assigned = await createTicket({
+      createdBy: requester.user._id,
+      assignedTo: technician.user._id,
+      title: "Assigned filter ticket"
+    });
+    const unassigned = await createTicket({
+      createdBy: requester.user._id,
+      title: "Unassigned filter ticket"
+    });
+
+    const assignedResponse = await api
+      .get(`/api/tickets?assignedTo=${technician.user._id}`)
+      .set(authorization(admin));
+    const unassignedResponse = await api
+      .get("/api/tickets?assignedTo=unassigned")
+      .set(authorization(admin));
+
+    expect(assignedResponse.body.tickets.map((ticket) => ticket.id)).toEqual([
+      assigned._id.toString()
+    ]);
+    expect(unassignedResponse.body.tickets.map((ticket) => ticket.id)).toEqual([
+      unassigned._id.toString()
+    ]);
+  });
+
+  test("non-admin personas cannot supply an assigned technician filter", async () => {
+    const requester = await createPersona("requester");
+    const technician = await createPersona("technician");
+    const response = await api
+      .get(`/api/tickets?assignedTo=${technician.user._id}`)
+      .set(authorization(requester));
+
+    expect(response.status).toBe(403);
+  });
+
+  test("priority sorts follow domain order in both directions", async () => {
+    const admin = await createPersona("admin");
+    const requester = await createPersona("requester");
+
+    for (const priority of ["Low", "Medium", "High", "Critical"]) {
+      await createTicket({
+        createdBy: requester.user._id,
+        priority,
+        title: `${priority} priority sorting ticket`
+      });
+    }
+
+    const highFirst = await api
+      .get("/api/tickets?sort=priority-high")
+      .set(authorization(admin));
+    const lowFirst = await api
+      .get("/api/tickets?sort=priority-low")
+      .set(authorization(admin));
+
+    expect(highFirst.body.tickets.map((ticket) => ticket.priority)).toEqual([
+      "Critical",
+      "High",
+      "Medium",
+      "Low"
+    ]);
+    expect(lowFirst.body.tickets.map((ticket) => ticket.priority)).toEqual([
+      "Low",
+      "Medium",
+      "High",
+      "Critical"
+    ]);
+  });
+
+  test("unsupported sort values are rejected", async () => {
+    const admin = await createPersona("admin");
+    const response = await api
+      .get("/api/tickets?sort=arbitraryField")
+      .set(authorization(admin));
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe("VALIDATION_ERROR");
+  });
+
+  test("list summaries omit heavy and sensitive detail fields", async () => {
+    const requester = await createPersona("requester");
+    const ticket = await createTicket({
+      createdBy: requester.user._id,
+      description: "A long list response description that should appear only as a bounded preview. ".repeat(4)
+    });
+    await api
+      .post(`/api/tickets/${ticket._id}/comments`)
+      .set(authorization(requester))
+      .send({ text: "This comment must remain detail-only." });
+
+    const listResponse = await api.get("/api/tickets").set(authorization(requester));
+    const detailResponse = await api
+      .get(`/api/tickets/${ticket._id}`)
+      .set(authorization(requester));
+    const summary = listResponse.body.tickets[0];
+
+    expect(summary).toHaveProperty("descriptionPreview");
+    expect(summary.descriptionTruncated).toBe(true);
+    expect(summary).not.toHaveProperty("description");
+    expect(summary).not.toHaveProperty("comments");
+    expect(summary).not.toHaveProperty("activities");
+    expect(summary.createdBy).not.toHaveProperty("email");
+    expect(detailResponse.body.description).toContain("bounded preview");
+    expect(detailResponse.body.comments).toHaveLength(1);
+    expect(detailResponse.body.createdBy).not.toHaveProperty("email");
+  });
+
+  test("the Ticket schema declares the intentional query indexes", () => {
+    const indexesByName = new Map(
+      Ticket.schema.indexes().map(([fields, options]) => [options.name, fields])
+    );
+
+    expect(indexesByName.get("requester_queue_newest")).toEqual({
+      createdBy: 1,
+      createdAt: -1,
+      _id: -1
+    });
+    expect(indexesByName.get("technician_queue_newest")).toEqual({
+      assignedTo: 1,
+      createdAt: -1,
+      _id: -1
+    });
+    expect(indexesByName.get("admin_queue_newest")).toEqual({
+      createdAt: -1,
+      _id: -1
+    });
+    expect(indexesByName.get("status_queue_newest")).toEqual({
+      status: 1,
+      createdAt: -1,
+      _id: -1
+    });
+    expect(indexesByName.get("priority_queue_newest")).toEqual({
+      priority: 1,
+      createdAt: -1,
+      _id: -1
+    });
+    expect(indexesByName.get("ticket_text_search")).toEqual({
+      title: "text",
+      description: "text"
+    });
   });
 });

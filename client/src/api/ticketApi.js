@@ -22,18 +22,21 @@ async function handleResponse(response) {
   return data;
 }
 
-export async function getTickets(priority = "All") {
+export async function getTickets(query = {}, { signal } = {}) {
   const params = new URLSearchParams();
 
-  if (priority !== "All") {
-    params.set("priority", priority);
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== null && value !== "" && value !== "All") {
+      params.set(key, value);
+    }
   }
 
   const queryString = params.toString();
   const url = queryString ? `${API_BASE_URL}/tickets?${queryString}` : `${API_BASE_URL}/tickets`;
 
   const response = await fetch(url, {
-    headers: getAuthHeaders()
+    headers: getAuthHeaders(),
+    signal
   });
   return handleResponse(response);
 }

@@ -172,4 +172,29 @@ const ticketSchema = new mongoose.Schema(
   }
 );
 
+ticketSchema.index(
+  { createdBy: 1, createdAt: -1, _id: -1 },
+  { name: "requester_queue_newest" }
+);
+ticketSchema.index(
+  { assignedTo: 1, createdAt: -1, _id: -1 },
+  { name: "technician_queue_newest" }
+);
+ticketSchema.index({ createdAt: -1, _id: -1 }, { name: "admin_queue_newest" });
+ticketSchema.index(
+  { status: 1, createdAt: -1, _id: -1 },
+  { name: "status_queue_newest" }
+);
+ticketSchema.index(
+  { priority: 1, createdAt: -1, _id: -1 },
+  { name: "priority_queue_newest" }
+);
+ticketSchema.index(
+  { title: "text", description: "text" },
+  {
+    name: "ticket_text_search",
+    weights: { title: 5, description: 1 }
+  }
+);
+
 module.exports = mongoose.model("Ticket", ticketSchema);

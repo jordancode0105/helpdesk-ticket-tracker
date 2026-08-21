@@ -48,7 +48,7 @@ I built this project to practice and demonstrate full-stack application developm
   - Medium
   - High
   - Critical
-- Priority filtering
+- Server-side pagination, search, filtering, and validated sorting
 - Dashboard cards for visible tickets
 - Comments on ticket detail pages
 - Structured activity history for creation, workflow, assignment, priority, and comment events
@@ -73,6 +73,81 @@ Status transitions are defined centrally on the server:
 | Closed | None | Open, In Progress, Resolved |
 
 Technicians must also be assigned to the ticket and may change only status. Requesters cannot change workflow fields. Submitting an unchanged value is a no-op and does not create a misleading event. These rules, the auditable history, and atomic multi-field admin updates demonstrate domain invariants and consistency concerns beyond ordinary CRUD handlers.
+
+## Ticket Query API
+
+`GET /api/tickets` uses page/limit pagination rather than returning the entire visible queue. Page-based pagination fits the current numbered previous/next interface and multiple sort options without adding cursor-token complexity. The API defaults to 10 tickets, accepts up to 50 per page, caps page numbers at 10,000, and uses `_id` as a deterministic tie-breaker for every sort.
+
+Supported query parameters:
+
+| Parameter | Accepted values | Default |
+| --- | --- | --- |
+| `page` | Integer from 1 to 10,000 | `1` |
+| `limit` | Integer from 1 to 50 | `10` |
+| `search` | Normalized 2–80 character text query or exact ObjectId | None |
+| `status` | `Open`, `In Progress`, `Resolved`, `Closed` | All |
+| `priority` | `Low`, `Medium`, `High`, `Critical` | All |
+| `category` | `Hardware`, `Software`, `Network`, `Account Access`, `Email`, `Other` | All |
+| `assignedTo` | Technician ObjectId or `unassigned`; admin only | All |
+| `sort` | `newest`, `oldest`, `priority-high`, `priority-low` | `newest` |
+
+Search uses MongoDB's native weighted text index across title and description, with title weighted more heavily. It does not execute client-provided regular expressions. A valid 24-character ObjectId performs an exact ticket-id lookup. Search, filters, pagination, and sorting are composed with the role predicate first: requesters remain limited to `createdBy`, technicians to `assignedTo`, and admins can query the synthetic queue broadly.
+
+The list response is deliberately different from the detail response:
+
+```json
+{
+  "tickets": [
+    {
+      "id": "...",
+      "title": "VPN connection fails",
+      "descriptionPreview": "The VPN client times out...",
+      "descriptionTruncated": false,
+      "category": "Network",
+      "status": "Open",
+      "priority": "High",
+      "createdBy": { "id": "...", "name": "Demo Requester", "role": "requester" },
+      "assignedTo": null,
+      "createdAt": "2026-08-21T12:00:00.000Z",
+      "updatedAt": "2026-08-21T12:00:00.000Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 10,
+    "totalItems": 24,
+    "totalPages": 3,
+    "hasNextPage": true,
+    "hasPreviousPage": false
+  },
+  "stats": {
+    "total": 24,
+    "open": 10,
+    "inProgress": 8,
+    "resolved": 5,
+    "closed": 1
+  }
+}
+```
+
+List rows contain a bounded description preview and only the user id, name, and role needed by the queue UI. Full descriptions and comments remain on `GET /api/tickets/:id`; activity remains on its separately authorized endpoint. Ticket responses no longer expose user emails.
+
+### Query indexes
+
+The Ticket schema defines indexes around actual queue access patterns:
+
+| Index | Query pattern and field-order rationale |
+| --- | --- |
+| `{ createdBy, createdAt, _id }` | Requester ownership equality followed by stable newest/oldest traversal. |
+| `{ assignedTo, createdAt, _id }` | Technician assignment equality and admin technician filtering followed by stable date order. |
+| `{ createdAt, _id }` | Default admin queue ordering without an ownership predicate. |
+| `{ status, createdAt, _id }` | Common workflow-status triage followed by stable date order. |
+| `{ priority, createdAt, _id }` | Priority-filtered queues followed by stable date order. |
+| Weighted `{ title: "text", description: "text" }` | Native term search without unsafe regex or an external service. |
+
+Category is intentionally not indexed because it is low-cardinality and less central than status/priority triage. Requester and technician category queries are still bounded by their role predicates. Each additional index consumes storage and adds write maintenance, so the schema does not create a standalone index for every filter. Custom priority ordering uses the domain order rather than alphabetical storage order and therefore requires a computed sort over the matched set; newest/oldest paths can use the queue indexes directly.
+
+This design avoids unbounded list responses and provides intentional query paths as the demo dataset grows. It is not a claim of production-scale performance; page/offset pagination becomes less efficient on very deep pages, and a cursor design would be the next step if that became an observed workload.
 
 ## Tech Stack
 
@@ -237,7 +312,7 @@ http://127.0.0.1:5173
 
 ## Automated Backend Tests
 
-The backend integration suite contains 85 tests using Vitest, Supertest, and an automatically managed in-memory MongoDB instance. It creates its own test users and tickets, clears the ephemeral database between tests, and never uses seeded, development, or production data.
+The backend integration suite contains 114 tests using Vitest, Supertest, and an automatically managed in-memory MongoDB instance. It creates its own test users and tickets, clears the ephemeral database between tests, and never uses seeded, development, or production data.
 
 Run the complete suite:
 
@@ -258,7 +333,7 @@ Generate the V8 coverage report:
 npm run test:coverage
 ```
 
-The suite covers persona signup, JWT rejection cases, role-scoped ticket visibility, requester/technician/admin permissions, both assignment paths, database non-mutation on rejected requests, API boundary validation, the complete technician transition matrix, representative admin transitions, activity authorization, event contents and ordering, comment/creation events, and rejected-mutation audit safety.
+The suite covers persona signup, JWT rejection cases, role-scoped ticket visibility, requester/technician/admin permissions, both assignment paths, database non-mutation on rejected requests, API boundary validation, the complete technician transition matrix, representative admin transitions, activity authorization, event contents and ordering, pagination boundaries, deterministic sorting, role-safe search, composable filters, list/detail response separation, and the declared query indexes.
 
 Coverage regression protection currently requires at least 80% statements, 70% branches, 80% functions, and 80% lines. These thresholds are deliberately below the current coverage so they catch substantial regressions without encouraging tests written only to preserve an arbitrary percentage.
 
@@ -441,8 +516,6 @@ PATCH  /api/tickets/:id/assign
 
 ## Future Improvements
 
-- Search by title or description
-- Pagination for large ticket queues
 - File attachments
 - Email notifications
 - Admin user management page
