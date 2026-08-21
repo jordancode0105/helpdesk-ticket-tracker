@@ -6,7 +6,10 @@ function TicketCard({ ticket }) {
       <div className="ticket-card-header">
         <div>
           <h2>{ticket.title}</h2>
-          <p>{ticket.description}</p>
+          <p>
+            {ticket.descriptionPreview}
+            {ticket.descriptionTruncated ? "…" : ""}
+          </p>
         </div>
 
         <Link className="button secondary" to={`/tickets/${ticket.id}`}>
